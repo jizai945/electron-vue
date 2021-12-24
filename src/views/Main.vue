@@ -6,7 +6,12 @@
         <common-header></common-header>
       </el-header>
       <common-tag></common-tag>
-      <el-main><router-view /></el-main>
+        <el-main>
+          <!-- keep alive 会缓存组件 -->
+          <keep-alive><router-view v-if="$route.meta.keepAlive"></router-view></keep-alive>
+          <!-- 不缓存的组件会被刷新 -->
+          <router-view v-if="!$route.meta.keepAlive"></router-view>
+        </el-main>
     </el-container>
   </el-container>
 </template>
@@ -23,6 +28,13 @@ export default {
     CommonAside,
     CommonHeader,
     CommonTag
+  },
+  data () {
+    return {
+      list: [
+        'can-tool'
+      ]
+    }
   }
 }
 </script>

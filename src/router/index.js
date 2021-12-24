@@ -16,13 +16,27 @@ const routes = [
     children: [
       {
         path: '/',
-        name: 'home',
-        component: () => import('@/views/Home/Home')
+        name: 'can-tool',
+        component: () => import('@/views/Can/Can-Tool'),
+        meta: {
+          keepAlive: true
+        }
       },
       {
-        path: '/can',
-        name: 'can-tool',
-        component: () => import('@/views/Can/Can-Tool')
+        path: '/',
+        name: 'canopen',
+        component: () => import('@/views/Can/Canopen'),
+        meta: {
+          keepAlive: true
+        }
+      },
+      {
+        path: '/test',
+        name: 'home',
+        component: () => import('@/views/Home/Home'),
+        meta: {
+          keepAlive: true
+        }
       },
       {
         path: '/mall',
@@ -35,6 +49,16 @@ const routes = [
         component: () => import('@/views/User/User')
       }
     ]
+  },
+  {
+    path: '/about',
+    name: 'About',
+    component: () => import('@/views/About')
+  },
+  {
+    path: '/canopenSub',
+    name: 'CanopenSub',
+    component: () => import('@/views/Can/CanopenSub')
   }
 ]
 

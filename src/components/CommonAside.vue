@@ -13,6 +13,7 @@
       v-for="item in noChildren"
       :key="item.path"
       @click="clickMenu(item)"
+      ref="commonAside"
     >
     <i :class="'el-icon-'+item.icon"></i>
     <span slot="title">{{item.label}}</span>
@@ -43,18 +44,25 @@ export default {
     return {
       menu: [
         {
-          path: '/',
-          name: 'home',
-          label: '首页',
-          icon: 's-home',
-          url: 'Home/Home'
-        },
-        {
-          path: '/can-tool',
+          path: '/can',
           name: 'can-tool',
           label: 'can工具',
           icon: 'paperclip',
           url: 'Can/Can-Tool'
+        },
+        {
+          path: '/canopen',
+          name: 'canopen',
+          label: 'canopen',
+          icon: 'star-off',
+          url: 'Can/Canopen'
+        },
+        {
+          path: '/',
+          name: 'home',
+          label: '测试',
+          icon: 's-home',
+          url: 'Home/Home'
         },
         {
           path: '/mall',
@@ -115,8 +123,10 @@ export default {
     isCollapse () {
       return this.$store.state.tab.isCollapse
     }
-  }
+  },
+  mounted () {
 
+  }
 }
 </script>
 

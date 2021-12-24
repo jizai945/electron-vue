@@ -1,12 +1,12 @@
 export default {
   state: {
-    isCollapse: false,
+    isCollapse: true, // true隐藏  false展开
     currentMenu: null,
     tabList: [
       {
-        path: '/',
-        name: 'home',
-        label: '首页',
+        path: '/can',
+        name: 'can-tool',
+        label: 'CAN',
         icon: 'home'
       }
     ]
@@ -17,8 +17,7 @@ export default {
     },
     selectMenu (state, val) {
       // val.name === 'home' ? (state.currentMenu = null) : state.currentMenu = val
-
-      if (val.name === 'home') {
+      if (val.name === 'can-tool') {
         state.currentMenu = null
       } else {
         state.currentMenu = val

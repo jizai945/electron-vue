@@ -16,11 +16,15 @@
     "core-js": "^3.6.5",
     "echarts": "^5.2.2",
     "element-ui": "^2.4.5",
+    "google-protobuf": "^3.19.1",
+    "grpc": "^1.24.11",
+    "iconv": "^3.0.1",
     "mockjs": "^1.1.0",
     "register-service-worker": "^1.7.1",
+    "umy-ui": "^1.1.6",
     "vue": "^2.6.11",
     "vue-router": "^3.2.0",
-    "vuex": "^3.4.0"
+    "vuex": "^3.6.2"
   },
   "devDependencies": {
     "@vue/cli-plugin-babel": "~4.5.0",
