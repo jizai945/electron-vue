@@ -34,7 +34,7 @@ async function createWindow () {
   const window = new Window()
   window.listen()
   window.createWindows({ isMainWin: true, width: 1200, height: 750 })
-  window.createTray()
+  // window.createTray() // 托盘
   global.win = window.main
   global.window = window
 

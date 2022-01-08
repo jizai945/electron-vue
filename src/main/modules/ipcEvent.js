@@ -30,4 +30,13 @@ export default function () {
         break
     }
   })
+  ipcMain.on('canopenSub2main', (event, arg) => {
+    const json_str = JSON.stringify(arg)
+    console.log('ipcmain[canopenSub->main]: ' + json_str)
+    switch (arg.msg) {
+      default:
+        sendMsg2Server(json_str)
+        break
+    }
+  })
 }

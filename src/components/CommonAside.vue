@@ -2,12 +2,14 @@
 <el-menu
     class="el-menu-vertical-demo"
     :collapse="isCollapse"
-    background-color="#545c64"
+    background-color="#6E7B8B"
     text-color="#fff"
     active-text-color="#ffd04b"
 >
   <h3 v-show="!isCollapse">Can-Tool</h3>
-  <h3 v-show="isCollapse">Can</h3>
+  <h3 v-show="isCollapse" >Can</h3>
+  <el-button v-show="isCollapse" plain icon="el-icon-menu" size="mini" @click="handleMenu" style="display:block;margin:0 auto"></el-button>
+  <el-button v-show="!isCollapse" plain icon="el-icon-menu" size="mini" @click="handleMenu" style="display:block;margin:0 auto;width: 80%;"></el-button>
     <el-menu-item
       :index="item.path"
       v-for="item in noChildren"
@@ -65,20 +67,6 @@ export default {
           url: 'Home/Home'
         },
         {
-          path: '/mall',
-          name: 'mall',
-          label: '商品管理',
-          icon: 'video-play',
-          url: 'MallManage/MallManage'
-        },
-        {
-          path: '/user',
-          name: 'user',
-          label: '用户管理',
-          icon: 'user',
-          url: 'UserManage/UserManage'
-        },
-        {
           label: '其他',
           icon: 'location',
           children: [
@@ -111,6 +99,9 @@ export default {
     clickMenu (item) {
       this.$router.push({ name: item.name })
       this.$store.commit('selectMenu', item)
+    },
+    handleMenu () {
+      this.$store.commit('collapseMenu')
     }
   },
   computed: {

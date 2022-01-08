@@ -6,6 +6,8 @@ import router from './router'
 import store from './store'
 import './plugins/element.js'
 import './plugins/umy.js'
+import './plugins/wechatTitle.js'
+// import './plugins/sortable.js'
 
 Vue.config.productionTip = false
 

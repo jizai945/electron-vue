@@ -1,6 +1,7 @@
 import json
 import traceback
 import modules.serial_canopen as serial_can
+from modules.sub_thread import *
 from . import ulog
 from .serial_canopen import SerialCan
 
@@ -12,12 +13,12 @@ END_SIGN = '|END' #  TCP结束符 处理粘包问题
 def tcp_send(send_fd:object, json:str):
     send_fd.write((json+END_SIGN).encode('utf8'))
 
-def msg_hello_process(send_fd:object):
+def msg_hello_process(send_fd:object, recv:dict):
     '''hello message'''
     tcp_send(send_fd, json.dumps({'msg':'hello res'}))
     ulog.debug(f'[server]: py -> js: "msg":"hello res"')
 
-def msg_fresh_port_process(send_fd:object):
+def msg_fresh_port_process(send_fd:object, recv:dict):
     '''端口刷新处理'''
     port_dict = serial_can.serial_port_getlist()
     send_dict = {'msg':'fresh port res', 'port_value':[], 'port_label':[]}
@@ -40,10 +41,11 @@ def serial_recv_cb(msg):
     send = {'msg': 'can frame', 'frame':' '.join(hex(x) for x in msg.data), 'canid':msg.arbitration_id, 'time':msg.timestamp}
     tcp_send(global_client_fd, json.dumps(send))
 
-def msg_port_open_process(send_fd:object, com:str):
+def msg_port_open_process(send_fd:object, recv:dict):
     '''端口打开处理'''
     global serial_obj
     global global_client_fd
+    com = recv['port']
     if serial_obj != None:
         serial_obj.close()      # 关闭
         del serial_obj          # 删除对象
@@ -59,15 +61,18 @@ def msg_port_open_process(send_fd:object, com:str):
     tcp_send(send_fd, json.dumps(send))
     ulog.debug(f'[server]: py -> js: {send}')
 
-def msg_port_close_process(send_fd:object):
+def msg_port_close_process(send_fd:object, recv:dict):
     '''端口关闭处理'''
     global serial_obj
     if serial_obj != None:
         serial_obj.close()      # 关闭
+    #  关闭串口不需要应答
 
-def msg_canopen_add_node(send_fd:object, id: int, path: str):
+def msg_canopen_add_node(send_fd:object, recv:dict):
     '''canopen 节点添加'''
     global serial_obj
+    id = recv['node']
+    path = recv['eds']
     if serial_obj == None or not serial_obj.get_connect_state():
         send = {'msg':'canopen add node res'}
         send['result'] = False
@@ -75,18 +80,20 @@ def msg_canopen_add_node(send_fd:object, id: int, path: str):
         send['describe'] = 'can 已断开'
         tcp_send(send_fd, json.dumps(send))
         return
-    result = serial_obj.add_canopen_node(id, path)
+    res, des = serial_obj.add_canopen_node(id, path)
     send = {'msg':'canopen add node res'}
-    send['result'] = result
+    send['result'] = res
     send['id'] = id
+    send['describe'] = des
     tcp_send(send_fd, json.dumps(send))
     ulog.debug(f'[server]: py -> js: {send}')
 
-def msg_canopen_remove_node(send_fd:object, id: int):
+def msg_canopen_remove_node(send_fd:object, recv:dict):
     '''canopen 节点移除'''
     global serial_obj
+    id = recv['node']
     if serial_obj == None or not serial_obj.get_connect_state():
-        send = {'msg':'canopen add node res'}
+        send = {'msg':'canopen remove node res'}
         send['result'] = False
         send['id'] = id
         send['describe'] = 'can 已断开'
@@ -100,15 +107,58 @@ def msg_canopen_remove_node(send_fd:object, id: int):
     tcp_send(send_fd, json.dumps(send))
     ulog.debug(f'[server]: py -> js: {send}')
 
-    #  关闭串口不需要应答
+def msg_canopen_node_upload(send_fd: object, recv: dict):
+    '''canopen 节点升级'''
+    global serial_obj
+    id = recv['id']
+    file = recv['file']
+
+    if serial_obj == None or not serial_obj.get_connect_state():
+        send = {'msg':'canopen upload start res'}
+        send['result'] = False
+        send['id'] = id
+        send['describe'] = 'can 已断开'
+        tcp_send(send_fd, json.dumps(send))
+        return
+    
+    # 开线程去处理
+    def uplaod_run_func(*args, **kwargs):
+        print('*'*30)
+        id = kwargs['id']
+        file = kwargs['file']
+        res, des = serial_obj.start_upload_func(id, file)
+        send = {'msg':'canopen upload start res'}
+        send['result'] = res
+        send['id'] = id
+        send['describe'] = des
+        tcp_send(send_fd, json.dumps(send))
+        ulog.debug(f'[server]: py -> js: {send}')
+
+    thread_run(uplaod_run_func, id=id, file=file)
+    
+
+
 # -----------------------------------------------------------------
 
 
 # --------------------------- js -> py 消息回调------------------------------
+# 字典匹配比if else效率高
+js2pyMsgCb = {
+    'hello':msg_hello_process,                          # hello for test
+    'fresh port': msg_fresh_port_process,               # 端口刷新
+    'req port open': msg_port_open_process,             # 打开端口连接
+    'req port close': msg_port_close_process,           # 关闭端口
+    'canopen add node': msg_canopen_add_node,           # 添加can节点
+    'canopen remove node': msg_canopen_remove_node,     # 删除canopen节点
+    'canopen upload start': msg_canopen_node_upload,    # canopen节点升级     
+}
+
 def tcp_msg_process_cb(rv:str, send_fd:object):
     '''
         send_fd.write( bytes )
     '''
+
+    global js2pyMsgCb
     print(rv)
     ulog.debug(f'[server]: js -> py: {rv}')
     
@@ -120,29 +170,11 @@ def tcp_msg_process_cb(rv:str, send_fd:object):
         try:
             recv_dict = json.loads(recv)
 
-            if recv_dict['msg'] == 'hello':
-                msg_hello_process(send_fd)
+            if recv_dict['msg'] in js2pyMsgCb:
+                js2pyMsgCb[recv_dict['msg']](send_fd, recv_dict)
+            else:
+                ulog.debug('msg unknown')
 
-            # 端口刷新
-            elif recv_dict['msg'] == 'fresh port':
-                msg_fresh_port_process(send_fd)
-                
-            # 打开端口连接
-            elif recv_dict['msg'] == 'req port open':
-                msg_port_open_process(send_fd, recv_dict['port'])
-
-            # 关闭端口
-            elif recv_dict['msg'] == 'req port close':
-                msg_port_close_process(send_fd)
-
-            # 添加can节点
-            elif recv_dict['msg'] == 'canopen add node':
-                msg_canopen_add_node(send_fd, recv_dict['node'], recv_dict['eds'])
-        
-            # 删除canopen节点
-            elif recv_dict['msg'] == 'canopen remove node':
-                msg_canopen_remove_node(send_fd, recv_dict['node'])
-        
         except Exception as e:
             ulog.error(traceback.format_exc())
             tcp_send(send_fd, recv)

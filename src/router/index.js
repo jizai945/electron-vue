@@ -37,16 +37,6 @@ const routes = [
         meta: {
           keepAlive: true
         }
-      },
-      {
-        path: '/mall',
-        name: 'mall',
-        component: () => import('@/views/Mall/Mall')
-      },
-      {
-        path: '/user',
-        name: 'user',
-        component: () => import('@/views/User/User')
       }
     ]
   },
@@ -58,7 +48,10 @@ const routes = [
   {
     path: '/canopenSub',
     name: 'CanopenSub',
-    component: () => import('@/views/Can/CanopenSub')
+    component: () => import('@/views/Can/CanopenSub'),
+    meta: {
+      title: '标题'
+    }
   }
 ]
 

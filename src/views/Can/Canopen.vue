@@ -1,5 +1,8 @@
 <template>
   <el-row style="min-width:1000px">
+    <el-card>
+      <i class="el-icon-s-tools"><span style="margin-left:10px;">CanOpen节点管理</span></i>
+    </el-card>
     <el-card class="box-card" >
       <div>
         <el-col :span="4" :offset="1"><div><el-button type="success" style="width:100%; margin-bottom:20px" @click="btnCanopenAddNode">添加canopen节点</el-button></div></el-col>
@@ -15,7 +18,7 @@
         </el-dialog>
       </div>
     </el-card>
-    <el-card class="box-card" style="margin-top:20px;">
+    <el-card class="box-card">
       <div slot="header" class="clearfix">
         <span style="color:#666699; margin-left: 50px">canopen节点管理</span>
       </div>
@@ -60,25 +63,28 @@ export default {
   methods: {
     // 添加节点按钮事件
     btnCanopenAddNode () {
-      windowCreate({
-        title: canopenRouteHead,
-        route: canopenRouteHead + '?id=' + 0 + '&eds=' + 0,
-        width: 1000,
-        height: 750,
-        backgroundColor: '#f9f9f9',
-        resizable: true,
-        modal: true,
-        maximize: false
-      })
-      // if (this.$store.state.canBtnStr !== '关闭') {
-      //   this.$notify.error({
-      //     title: '无法添加',
-      //     message: '请先打开can口',
-      //     position: 'bottom-left'
-      //   })
-      // }
+      // windowCreate({
+      //   title: canopenRouteHead,
+      //   route: canopenRouteHead + '?id=' + 0 + '&eds=C:\\Users\\Wang\\Desktop\\e35-pudu.eds',
+      //   width: 1000,
+      //   height: 750,
+      //   backgroundColor: '#f9f9f9',
+      //   resizable: true,
+      //   modal: true,
+      //   maximize: false,
+      //   autoHideMenuBar: true
+      // })
 
-      // this.dialogCanopenNodeVisible = true
+      if (this.$store.state.canBtnStr !== '关闭') {
+        this.$notify.error({
+          title: '无法添加',
+          message: '请先打开can口',
+          position: 'bottom-left'
+        })
+        return
+      }
+
+      this.dialogCanopenNodeVisible = true
     },
     // 选择eds文件
     btnChoiceEds () {
@@ -137,7 +143,8 @@ export default {
         backgroundColor: '#f9f9f9',
         resizable: true,
         modal: true,
-        maximize: false
+        maximize: false,
+        autoHideMenuBar: true
       })
     },
     // 节点删除
@@ -172,8 +179,26 @@ export default {
           }
           this.canopenTableViewFresh()
           break
+        // 请求打开端口反馈 （如果是重新打开can则把载入的eds节点重新添加上）
+        case 'req port open res':
+          if (arg.result === true) {
+            for (var id in this.canidManger) {
+              ipcRenderer.send('canopen2main', { msg: 'canopen add node', node: this.hex2int(id), eds: this.canidManger[id].eds })
+            }
+          }
+          break
       }
     })
+  },
+  destroyed () {
+    // 销毁的事情要记得
+    ipcRenderer.removeAllListeners() // ！！！
   }
 }
 </script>
+
+<style>
+.el-card {
+  margin-top: 20px;
+}
+</style>

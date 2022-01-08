@@ -2,12 +2,12 @@
     <header>
         <div class="l-content">
             <el-button plain icon="el-icon-menu" size="mini" @click="handleMenu"></el-button>
-            <el-breadcrumb>
+            <!-- <el-breadcrumb>
               <el-breadcrumb-item :to="{ path: '/' }">CAN</el-breadcrumb-item>
               <el-breadcrumb-item :to="current.path" v-if="current">
                   {{current.label}}
               </el-breadcrumb-item>
-            </el-breadcrumb>
+            </el-breadcrumb> -->
         </div>
         <!-- <div class="r-content">
             <el-dropdown trigger="click" size="mini">
@@ -51,9 +51,11 @@ header {
   height: 100%;
   align-items: center;
   justify-content: space-between;
+  background: #6E7B8B;
 }
 
 .l-content {
+  padding: 0px;
   display: flex;
   align-items: center;
   .el-button {

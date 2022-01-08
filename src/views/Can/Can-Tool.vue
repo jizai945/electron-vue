@@ -1,6 +1,9 @@
 <template>
   <el-row style="min-width:1000px">
-    <el-card class="box-card" >
+    <el-card>
+      <i class="el-icon-s-tools"><span style="margin-left:10px;">CAN-Serial</span></i>
+    </el-card>
+    <el-card class="box-card">
       <div>
         <el-col :span="2"><div><el-button type="primary" style="width:100%;" @click="btnFreshPort" :disabled="btnFreshDisabled">刷新</el-button></div></el-col>
         <el-col :span="17" :offset="1"><div><el-select v-model="portSelect" style="width:100%" placeholder="请选择" :disabled="selectPortDisabled">
@@ -14,16 +17,16 @@
         <el-col :span="3" :offset="1"><div><el-button type="primary" style="width:100%; margin-bottom: 20px" @click="btnChangePort" :disabled="btnChangeDisabled">{{portNextState}}</el-button></div></el-col>
       </div>
     </el-card>
-    <el-card class="box-card" style="margin-top:20px">
+    <el-card class="box-card">
       <div>
         <el-col :span="3"><div><el-button type="danger" style="width:100%; margin-bottom:20px" @click="btnClear" >清空CAN日志</el-button></div></el-col>
-        <el-col :span="3" :offset="1"><el-input v-model="canidInput" placeholder="CANID(0x02)"></el-input></el-col>
-        <el-col :span="8" :offset="1"><el-input v-model="frameInput" placeholder="发送帧(0x01 0x02 0x03)"></el-input></el-col>
+        <el-col :span="3" :offset="1"><el-input v-model="canidInput" placeholder="CANID( FF 00 )"></el-input></el-col>
+        <el-col :span="8" :offset="1"><el-input v-model="frameInput" placeholder="发送帧( F0 F1 F2 ...)"></el-input></el-col>
         <el-col :span="3" :offset="1"><div><el-button type="success" style="width:100%; margin-bottom:20px" @click="btnSend" >发送can数据</el-button></div></el-col>
         <el-col :span="3" :offset="1"><div><el-button type="warning" style="width:100%; margin-bottom:20px" @click="btnCanopen" >CanOpen视图</el-button></div></el-col>
       </div>
     </el-card>
-    <el-card class="box-card" style="margin-top:20px;">
+    <el-card class="box-card">
       <div slot="header" class="clearfix">
         <span>can日志数据</span>
       </div>
@@ -106,6 +109,7 @@ export default {
       if (this.canidInput === '' || this.frameInput === '') {
         this.$message.error('canid 或 数据帧不允许为空')
       }
+      // this.hex2int
     },
     btnCanopen () {
       if (this.$store.state.canBtnStr !== '关闭') {
@@ -211,6 +215,17 @@ export default {
     portNextState () {
       return this.$store.state.canBtnStr
     }
+  },
+  destroyed () {
+    // 销毁的事情要记得
+    ipcRenderer.removeAllListeners() // ！！！
   }
 }
 </script>
+
+<style>
+.el-card{
+  margin-top: 20px;
+}
+
+</style>

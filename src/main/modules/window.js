@@ -91,18 +91,23 @@ export class Window {
       console.log(666)
     }
 
+    // 改变窗口参数
     if (typeof args.modal === 'boolean') opt.modal = args.modal
     if (typeof args.resizable === 'boolean') opt.resizable = args.resizable
     if (args.backgroundColor) opt.backgroundColor = args.backgroundColor
     if (args.minWidth) opt.minWidth = args.minWidth
     if (args.minHeight) opt.minHeight = args.minHeight
+    if (args.autoHideMenuBar) opt.autoHideMenuBar = args.autoHideMenuBar
+    if (args.frame) opt.frame = args.frame
+    if (args.title) opt.title = args.title
 
     console.log(opt)
     const win = new BrowserWindow(opt)
     console.log('窗口id：' + win.id)
     this.group[win.id] = {
       route: args.route,
-      isMultiWindow: args.isMultiWindow
+      isMultiWindow: args.isMultiWindow,
+      win: win
     }
     // 是否最大化
     if (args.maximize && args.resizable) {
@@ -113,19 +118,32 @@ export class Window {
       if (this.main) {
         console.log('主窗口存在')
         delete this.group[this.main.id]
-        this.main.close()
+        this.main.destory()
       }
       this.main = win
     }
     args.id = win.id
     win.on('close', (e) => {
-      if (this.group[Number(win.id)]) delete this.group[Number(win.id)]
+      if (this.group[Number(win.id)]) {
+        var route = this.group[Number(win.id)].route // 限度出来
+        console.log(this.group)
+        delete this.group[Number(win.id)]
+        // 判断是否是主窗口关闭，是的话则关闭所有窗口
+        if (route === '') {
+          app.quit()
+        }
+      }
+      try {
+        win.destroy() // 强制关闭这个窗口，会触发win的closed事件，不会触发close事件
+      } catch (e) {
+        console.log(e)
+      }
       // win.setOpacity(0) // 设置不透明度，仅隐藏
     })
 
     // 打开网址（加载页面）
     /**
-         * 开发环境: http://localhost:8080
+         * 开发环境: http://localhost:8088
          * 正式环境: app://./index.html
          */
     let winURL
@@ -221,7 +239,8 @@ export class Window {
       console.log('window-closed-route: ' + route)
       for (const i in this.group) {
         if (this.getWindow(Number(i)) && this.group[i].route === route && !this.group[i].isMultiWindow) {
-          this.getWindow(Number(i)).close()
+          // this.getWindow(Number(i)).close()
+          this.getWindow(Number(i)).destroy()
           delete this.group[Number(i)]
         }
       }

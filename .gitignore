@@ -155,6 +155,7 @@ dmypy.json
 .vscode/
 tmp/
 log/
+example/
 
 # Pyre type checker
 .pyre/
