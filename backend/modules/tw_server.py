@@ -26,6 +26,7 @@ class Process(protocol.Protocol):
             data_str = data.decode('utf8', 'ignore')
             ulog.debug(f'tcp recv: {data_str}')
             if data_str == 'exit':
+                ulog.debug('tcp recv exit')
                 reactor.stop()
                 return
             if process_cb:

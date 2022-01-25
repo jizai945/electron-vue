@@ -11,12 +11,11 @@ export default function () {
     switch (arg.msg) {
       // 这里做分支是为了以后需要特殊处理做预留
       case 'fresh port':
-        sendMsg2Server(json_str)
-        break
       case 'req port open':
+      case 'req port close':
         sendMsg2Server(json_str)
         break
-      case 'req port close':
+      default:
         sendMsg2Server(json_str)
         break
     }

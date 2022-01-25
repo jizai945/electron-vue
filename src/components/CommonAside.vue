@@ -1,10 +1,13 @@
 <template>
 <el-menu
-    class="el-menu-vertical-demo"
+    class="leftMenu"
     :collapse="isCollapse"
-    background-color="#6E7B8B"
-    text-color="#fff"
-    active-text-color="#ffd04b"
+    background-color="#ffffff"
+    text-color="#000000"
+    active-text-color="#00BFFF"
+    default-active="/can"
+    :active="menuActive"
+    ref="leftMenu"
 >
   <h3 v-show="!isCollapse">Can-Tool</h3>
   <h3 v-show="isCollapse" >Can</h3>
@@ -44,19 +47,20 @@
 export default {
   data () {
     return {
+      menuActive: '/can',
       menu: [
         {
           path: '/can',
           name: 'can-tool',
           label: 'can工具',
-          icon: 'paperclip',
+          icon: 'apple',
           url: 'Can/Can-Tool'
         },
         {
           path: '/canopen',
           name: 'canopen',
           label: 'canopen',
-          icon: 'star-off',
+          icon: 'pear',
           url: 'Can/Canopen'
         },
         {
@@ -116,24 +120,36 @@ export default {
     }
   },
   mounted () {
+    // 页面加载好后执行
 
+  },
+  watch: {
+    // canTableData () {
+    //   this.$nextTick(() => {
+    //     console.log(this.$refs.canTable)
+    //     // this.$refs.canTable.bodyWrapper.scrollTop = this.$refs.canTable.bodyWrapper.scrollHeight
+    //   })
+    // }
+    '$store.state.tab.currentMenu' (val) {
+      this.$refs.leftMenu.activeIndex = val
+    }
   }
 }
 </script>
 
 <style lang="scss" scoped>
 .el-menu {
-  height: 100vh;
+  height: 150vh;
   border: none;
   h3 {
-    color: #ffffff;
+    color: #000000;
     text-align: center;
     line-height: 48px;
   }
 }
-.el-menu-vertical-demo:not(.el-menu--collapse) {
-  width: 200px;
+.leftMenu:not(.el-menu--collapse) {
+  width: 150px;
   min-height: 100%;
-  height: 100vh;
+  height: 200vh;
 }
 </style>

@@ -119,8 +119,20 @@
             <div v-if="uploadShow" style="margin-top:50px">
               <el-col :span="16"><el-input placeholder="文件路径" v-model="uploadInput" :disabled="true"></el-input></el-col>
               <el-col :span="3" :offset="1"><el-button style="width:100%" type="primary" @click="chioceUploadFile">选择升级文件</el-button></el-col>
-              <el-col :span="2" :offset="1"><el-button type="success" @click="uploadStart">开始升级</el-button></el-col>
+              <el-col :span="2" :offset="1"><el-button type="success" @click="uploadStart" :disabled="uploadDisabled">开始升级</el-button></el-col>
+              <el-col :span="24" style="margin-top:20px">
+                <el-input>
+                  id="uploadId"
+                  type="upload"
+                  :rows=logRows
+                  readonly
+                  show-word-limi
+                  placeholder="日志"
+                  v-model="textarea">
+                </el-input>
+              </el-col>
             </div>
+
           </el-row>
         </el-card>
       </el-col>
@@ -143,6 +155,7 @@ export default {
       treeShow: true,
       tableShow: true,
       uploadShow: true,
+      uploadDisabled: false,
       title: 'test',
       edsFileName: '',
       edsFileVersion: '',
@@ -331,10 +344,10 @@ export default {
     // 分析节点信息
     analysisNode (config, subSection) {
       for (var key in subSection) {
-        const idx = subSection[key].substring(2)// 去掉0x
         if (key === 'SupportedObjects') {
           continue
         }
+        const idx = subSection[key].substring(2)// 去掉0x
 
         // console.log(idx)
         var parent = this.findFrontNode(idx.substr(0, 1))
@@ -399,6 +412,7 @@ export default {
         })
       } else {
         ipcRenderer.send('canopenSub2main', { msg: 'canopen upload start', id: this.canID, file: this.uploadInput })
+        this.uploadDisabled = true // 升级按钮失效
       }
     }
   },
@@ -457,12 +471,13 @@ export default {
           if (arg.id !== this.canID) {
             return
           }
-
+          this.uploadDisabled = false // 升级按钮使能
           this.$notify({
             title: '升级结果',
             message: arg.result === true ? '升级成功' : '升级失败: ' + arg.describe,
             type: arg.result === true ? 'success' : 'error',
-            position: 'bottom-left'
+            position: arg.result === true ? 'bottom-left' : 'top-right',
+            duration: arg.result === true ? 3000 : 0
           })
 
           break

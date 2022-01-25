@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, Menu, Tray, ipcRenderer } from 'electron'
 import { createProtocol } from 'vue-cli-plugin-electron-builder/lib'
+import { stopSever } from './clientConnect'
 
 import path from 'path'
 
@@ -131,6 +132,8 @@ export class Window {
         // 判断是否是主窗口关闭，是的话则关闭所有窗口
         if (route === '') {
           app.quit()
+          console.log('win quit')
+          stopSever() // 关闭服务端
         }
       }
       try {

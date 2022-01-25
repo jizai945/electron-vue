@@ -1,5 +1,5 @@
 import { getQueryVariableFromStr } from './util'
-var canFrameBuf = { msg: 'can frame buff', f: [], id: [], t: [] }
+var canFrameBuf = { msg: 'can frame buff', f: [], id: [], t: [], d: [] }
 var canTimer = false
 var lastStr = ''
 var canopenWinMap = new Map()
@@ -10,6 +10,7 @@ function canpBuffSend () {
     canFrameBuf.f = []
     canFrameBuf.id = []
     canFrameBuf.t = []
+    canFrameBuf.d = []
   }
 }
 
@@ -45,6 +46,7 @@ function tcpRecvSubProcess (recvJson) {
         canFrameBuf.f.push(recvJson.frame)
         canFrameBuf.id.push(recvJson.canid)
         canFrameBuf.t.push(recvJson.time)
+        canFrameBuf.d.push(recvJson.dir)
         // global.win.webContents.send('main2can', recvJson)
         break
       case 'canopen add node res': // canopen添加节点
@@ -74,6 +76,9 @@ function tcpRecvSubProcess (recvJson) {
         }
 
         break
+      default:
+        global.win.webContents.send('main2can', recvJson)
+        break
     }
   }
 }
@@ -93,7 +98,12 @@ function tcpRecvProcess (recv) {
       const recvJson = JSON.parse(sub)
       tcpRecvSubProcess(recvJson)
     } catch (err) {
-      lastStr = sub
+      if (lastStr.length > 2048) {
+        // 这么长都解析失败，应该是出错了
+        lastStr = ''
+      } else {
+        lastStr = sub
+      }
     }
   }
 }

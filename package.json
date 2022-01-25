@@ -1,6 +1,6 @@
 {
   "name": "pudu-can-tool",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "private": true,
   "scripts": {
     "serve": "vue-cli-service serve",
@@ -13,6 +13,7 @@
   },
   "main": "background.js",
   "dependencies": {
+    "@xunlei/vue-context-menu": "^1.0.2",
     "core-js": "^3.6.5",
     "echarts": "^5.2.2",
     "element-ui": "^2.4.5",

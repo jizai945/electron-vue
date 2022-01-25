@@ -35,10 +35,14 @@ def serial_err_cb(err:str):
     tcp_send(global_client_fd, json.dumps(send_dict))
     # ulog.error(err)
 
-
 def serial_recv_cb(msg):
     '''can接收数据回调'''
-    send = {'msg': 'can frame', 'frame':' '.join(hex(x) for x in msg.data), 'canid':msg.arbitration_id, 'time':msg.timestamp}
+    send = {'msg': 'can frame', 'frame':' '.join((hex(x)[2:].zfill(2)) for x in msg.data), 'canid':msg.arbitration_id, 'time':msg.timestamp, 'dir':'r'}
+    tcp_send(global_client_fd, json.dumps(send))
+
+def serial_send_cb(msg):
+    '''can发送数据回调'''
+    send = {'msg': 'can frame', 'frame':' '.join((hex(x)[2:].zfill(2)) for x in msg.data), 'canid':msg.arbitration_id, 'time':msg.timestamp, 'dir':'s'}
     tcp_send(global_client_fd, json.dumps(send))
 
 def msg_port_open_process(send_fd:object, recv:dict):
@@ -52,8 +56,9 @@ def msg_port_open_process(send_fd:object, recv:dict):
 
     global_client_fd = send_fd
     serial_obj = SerialCan()
-    serial_obj.set_recv_cb(serial_recv_cb)  # 设置信息接收回调
-    serial_obj.set_err_cb(serial_err_cb)     # 设置一个异常回调，发消息回去通知
+    serial_obj.set_recv_cb(serial_recv_cb)      # 设置信息接收回调
+    serial_obj.set_err_cb(serial_err_cb)        # 设置一个异常回调，发消息回去通知
+    serial_obj.set_send_cb(serial_send_cb)      # 设置can发送回调
     serial_obj.open(com)
     send = {'msg':'req port open res'}
     send['result'] = serial_obj.get_connect_state()
@@ -67,6 +72,34 @@ def msg_port_close_process(send_fd:object, recv:dict):
     if serial_obj != None:
         serial_obj.close()      # 关闭
     #  关闭串口不需要应答
+
+def msg_can_send_frame(send_fd:object, recv:dict):
+    '''can发送一帧数据'''
+    global serial_obj
+    if serial_obj == None:
+        send = {'msg':'can send frame res'}
+        send['result'] = False
+        send['code'] = 'can未打开' # 错误描述
+        tcp_send(send_fd, json.dumps(send))
+        ulog.debug(f'[server]: py -> js: {send}')
+        return
+
+    try:
+        bt = bytes.fromhex(recv['frame'])
+        offset = 0
+        while offset < len(bt):
+            size = 8 if offset + 8 < len(bt) else len(bt) - offset
+            serial_obj.send_one_frame(recv['canID'], bt[offset: offset+size])
+            offset += 8
+    except Exception as e:
+        # 错误才反馈
+        print(e)
+        send = {'msg':'can send frame res'}
+        send['result'] = False
+        send['code'] = str(e) # 错误描述
+        tcp_send(send_fd, json.dumps(send))
+        ulog.debug(f'[server]: py -> js: {send}')
+
 
 def msg_canopen_add_node(send_fd:object, recv:dict):
     '''canopen 节点添加'''
@@ -148,9 +181,10 @@ js2pyMsgCb = {
     'fresh port': msg_fresh_port_process,               # 端口刷新
     'req port open': msg_port_open_process,             # 打开端口连接
     'req port close': msg_port_close_process,           # 关闭端口
+    'can send frame': msg_can_send_frame,               # can发送一帧 
     'canopen add node': msg_canopen_add_node,           # 添加can节点
     'canopen remove node': msg_canopen_remove_node,     # 删除canopen节点
-    'canopen upload start': msg_canopen_node_upload,    # canopen节点升级     
+    'canopen upload start': msg_canopen_node_upload,    # canopen节点升级 
 }
 
 def tcp_msg_process_cb(rv:str, send_fd:object):

@@ -70,11 +70,11 @@ def generate_attach_json(hver_=[], prj='HOLA_PJ0003', btype='motorboard', func='
     offset = len(HEAD) + 4 + 4 + file_info_json_len + file_log_len + attach_json_len
 
     attach = dict()
-    attach['imgCnt'] = len(sub_file_list)
-    attach['imgList'] = list()
-    for i in range(attach['imgCnt']):
+    attach['img_cnt'] = len(sub_file_list)
+    attach['img_list'] = list()
+    for i in range(attach['img_cnt']):
         sub_dict = dict()
-        sub_dict['partion_name'] = sub_partion_names[i]
+        sub_dict['partion_label'] = sub_partion_names[i]
         sub_dict['version'] = VERSION
         if not encrypted:
             sub_dict['csize'] = get_file_size(sub_file_list[i])         # 加密后大小
@@ -86,22 +86,31 @@ def generate_attach_json(hver_=[], prj='HOLA_PJ0003', btype='motorboard', func='
             sub_dict['fpos']['size'] = sub_dict['csize']                # 大小
             offset += sub_dict['csize']
         sub_dict['deps'] = dict()
-        sub_dict['deps']['mcuModel'] = mcuModel
+        sub_dict['deps']['mcu_model'] = mcuModel
         sub_dict['deps']['hver'] = hver
         sub_dict['deps']['prj'] = prj
         sub_dict['deps']['btype'] = btype
         sub_dict['deps']['func'] = func
+        # for test
+        # sub_dict['deps']['prj'] = 'HOLA_PJ0002'
+        # if sub_partion_names[i] == 'runtime':
+        #     sub_dict['deps']['prj'] = ''
+        # else:
+        #     sub_dict['deps']['prj'] = prj
+        #     sub_dict['deps']['btype'] = btype
+        #     sub_dict['deps']['func'] = func
 
-        attach['imgList'].append(sub_dict)
+        attach['img_list'].append(sub_dict)
 
     attach_json_str = json.dumps(attach, ensure_ascii=False)
-    if len(attach_json_str) > attach_json_len + len(json_str_end) + 1:
-        click.secho(f'attach json len > {attach_json_len + len(json_str_end) + 1}', err=True, fg='red')
+    if len(attach_json_str.encode('utf-8')) > attach_json_len + len(json_str_end.encode('utf-8')) + 1:
+        click.secho(f'attach json len > {attach_json_len + len(json_str_end.encode("utf-8")) + 1}', err=True, fg='red')
         sys.exit(1)
 
     # 字符串不满长度，填充空格
+    use_size = len(attach_json_str.encode('utf-8'))
     attach_json_str += json_str_end
-    attach_json_str += ' ' * (attach_json_len - len(attach_json_str) - len(json_str_end) - 1)
+    attach_json_str += ' ' * (attach_json_len - use_size - len(json_str_end.encode('utf-8')) - 1)
     attach_json_str += '\n'
 
     # click.echo(json_str)
@@ -119,7 +128,7 @@ def generate_file_info_json(file:str, sub_file_list:list, version:str) -> str:
 
     info_dict = dict()
     info_dict['fver'] = VERSION                                 # 文件格式版本
-    info_dict['file'] = file                                    # 文件名
+    info_dict['name'] = file                                    # 文件名
     info_dict['ver'] = version                                  # 文件版本
     for su in sub_file_list:
         size += get_file_size(su)
@@ -138,18 +147,17 @@ def generate_file_info_json(file:str, sub_file_list:list, version:str) -> str:
     info_dict['attach']['crc'] = crc32_bytes(bytes(attach_json_str.split(json_str_end)[0], encoding = 'utf-8'))
 
     json_str = json.dumps(info_dict, ensure_ascii=False)
-    if len(json_str) > file_info_json_len + len(json_str_end) + 1:
-        click.secho(f'file info json len > {file_info_json_len + len(json_str_end) + 1}', err=True, fg='red')
+    if len(json_str.encode('utf-8')) > file_info_json_len + len(json_str_end.encode('utf-8')) + 1:
+        click.secho(f'file info json len > {file_info_json_len + len(json_str_end.encode("utf-8")) + 1}', err=True, fg='red')
         sys.exit(1)
 
     # 字符串不满长度，填充空格
+    use_size = len(json_str.encode('utf-8'))
     json_str += json_str_end
-    json_str += ' ' * (file_info_json_len - len(json_str) - len(json_str_end) - 1)
+    json_str += ' ' * (file_info_json_len - use_size - len(json_str_end.encode('utf-8')) - 1)
     json_str += '\n'
 
-    # click.echo(json_str)
     return json_str
-
 
 @click.group()
 def cli():
@@ -172,7 +180,7 @@ def pack_process(file_name:str, pack_version:str) -> bool:
 
     attach_str = generate_attach_json()  # 生成附加数据
     log_str = ''  # 日志
-    file_info_str = generate_file_info_json(file_name, sub_file_list, pack_version)  # 描述信息
+    file_info_str = generate_file_info_json('/firmware/user', sub_file_list, pack_version)  # 描述信息
     file_info_crc = crc32_bytes(bytes(file_info_str.split(json_str_end)[0], encoding='utf-8')) # 结束符前的crc
     sub_file_bytes = bytes()
     for fi in sub_file_list:
@@ -197,7 +205,7 @@ def pack_process(file_name:str, pack_version:str) -> bool:
     click.echo('子文件路径: ')
     for fi, pa in zip(sub_file_list, sub_partion_names):
         click.secho(
-            f'*\t{fi} - partion_name:({pa}) - size:({get_file_size(fi)}) - crc:({"0x{:08x}".format(get_file_crc(fi))})',
+            f'*\t{fi} - partion_label:({pa}) - size:({get_file_size(fi)}) - crc:({"0x{:08x}".format(get_file_crc(fi))})',
             fg='yellow')
 
     click.secho('-' * 100, fg='green')
@@ -337,7 +345,7 @@ if __name__ == '__main__':
             cli()
 
     except Exception as e:
-        click.echo(e, err=True, fg='red')
+        click.secho(e, err=True, fg='red')
         sys.exit(1)
 
     # pack_func('test', ['ulog.py'], ['user'], 'v0.0.1', 'stm32f4', ['xxx', 'yyy'])

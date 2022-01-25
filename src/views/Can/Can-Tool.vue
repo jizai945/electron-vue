@@ -21,23 +21,27 @@
       <div>
         <el-col :span="3"><div><el-button type="danger" style="width:100%; margin-bottom:20px" @click="btnClear" >清空CAN日志</el-button></div></el-col>
         <el-col :span="3" :offset="1"><el-input v-model="canidInput" placeholder="CANID( FF 00 )"></el-input></el-col>
-        <el-col :span="8" :offset="1"><el-input v-model="frameInput" placeholder="发送帧( F0 F1 F2 ...)"></el-input></el-col>
+        <el-col :span="8" :offset="1"><el-input v-model="frameInput" placeholder="帧数据( F0 F1 F2 ...)"></el-input></el-col>
         <el-col :span="3" :offset="1"><div><el-button type="success" style="width:100%; margin-bottom:20px" @click="btnSend" >发送can数据</el-button></div></el-col>
-        <el-col :span="3" :offset="1"><div><el-button type="warning" style="width:100%; margin-bottom:20px" @click="btnCanopen" >CanOpen视图</el-button></div></el-col>
+        <el-col :span="3" :offset="1"><div><el-button type="warning" style="width:100%; margin-bottom:20px" @click="btnCanopen" >节点管理</el-button></div></el-col>
       </div>
     </el-card>
     <el-card class="box-card">
       <div slot="header" class="clearfix">
-        <span>can日志数据</span>
+        <span>can数据(上面为最新,最大缓存1000条)</span>
+        <el-checkbox v-model="recvChecked" style="margin-left: 20px">接收</el-checkbox>
       </div>
       <div>
         <el-col :span="24" style="margin-top:10px; margin-bottom:20px">
-          <u-table :data="canTableData" :border="true" stripe style="width: 100%" max-height="500px">
-            <u-table-column type="index" label="number" width="80"></u-table-column>
-            <u-table-column prop="direction" label="方向" width="180"></u-table-column>
-            <u-table-column prop="canid" label="帧ID" width="180"></u-table-column>
-            <u-table-column prop="frame" label="数据"> </u-table-column>
-          </u-table>
+          <!-- 只要在el-table元素中定义了height属性，即可实现固定表头的表格，而不需要额外的代码。 -->
+          <el-table ref="canTable" class="tableBox" max-height="600" :row-class-name="tableRowClassName" :data="canTableData" :border="true" >
+            <!-- <el-table-column type="index" label="number" width="80"></el-table-column> -->
+            <el-table-column prop="num" label="nu" width="50"></el-table-column>
+            <el-table-column prop="time" label="time" width="200"></el-table-column>
+            <el-table-column prop="direction" label="方向" width="80"></el-table-column>
+            <el-table-column prop="canid" label="帧ID" width="150"></el-table-column>
+            <el-table-column prop="frame" label="数据(16进制)"> </el-table-column>
+          </el-table>
         </el-col>
       </div>
     </el-card>
@@ -59,12 +63,14 @@ export default {
       btnFreshDisabled: false,
       btnChangeDisabled: false,
       selectPortDisabled: false,
+      recvChecked: true,
       canTableData: [
       ],
       canTableDataCache: [
       ],
       canidInput: '',
-      frameInput: ''
+      frameInput: '',
+      canNum: 0
     }
   },
   methods: {
@@ -72,6 +78,15 @@ export default {
     btnFreshPort () {
       this.portSelect = ''
       ipcRenderer.send('can2main', { msg: 'fresh port' })
+    },
+    close_can () {
+      // 关闭串口
+      this.btnFreshDisabled = false
+      this.btnChangeDisabled = false
+      this.selectPortDisabled = false
+      this.$store.state.canBtnStr = '打开'
+      // 请求关闭串口
+      ipcRenderer.send('can2main', { msg: 'req port close', port: this.portSelect })
     },
     // 打开 / 关闭 按钮事件
     btnChangePort () {
@@ -93,23 +108,22 @@ export default {
         // 请求打开串口
         ipcRenderer.send('can2main', { msg: 'req port open', port: this.portSelect })
       } else {
-        // 关闭串口
-        this.btnFreshDisabled = false
-        this.btnChangeDisabled = false
-        this.selectPortDisabled = false
-        this.$store.state.canBtnStr = '打开'
-        // 请求关闭串口
-        ipcRenderer.send('can2main', { msg: 'req port close', port: this.portSelect })
+        this.close_can()
       }
     },
     btnClear () {
       this.canTableData = []
+      this.canTableDataCache = []
+      this.canNum = 0
     },
     btnSend () {
       if (this.canidInput === '' || this.frameInput === '') {
         this.$message.error('canid 或 数据帧不允许为空')
+        return
       }
-      // this.hex2int
+      const canID = this.hex2int(this.canidInput)
+      // 发送
+      ipcRenderer.send('can2main', { msg: 'can send frame', canID: canID, frame: this.frameInput })
     },
     btnCanopen () {
       if (this.$store.state.canBtnStr !== '关闭') {
@@ -131,6 +145,18 @@ export default {
       }
       this.$router.push({ name: 'canopen' })
       this.$store.commit('selectMenu', item)
+    },
+    // 表格状态
+    tableRowClassName ({ row, rowIndex }) {
+      // console.log(row)
+      if (row.direction === 'recv') {
+        // return 'recv-row'
+        if (rowIndex % 2) {
+          return 'recv-row'
+        }
+        return ''
+      }
+      return 'send-row'
     }
   },
   mounted () {
@@ -152,7 +178,7 @@ export default {
           }
           // 默认选取第一个
           if (this.portList.length) {
-            this.portSelect = this.portList[0].label
+            this.portSelect = this.portList[0].value
           }
           break
         // 请求打开端口反馈
@@ -180,11 +206,21 @@ export default {
           break
         // can数据上报
         case 'can frame':
-          // console.log(arg.frame)
-          if (this.canTableData.length > 30) {
-            this.canTableData.shift()
+          if (this.recvChecked === false && arg.dir === 'r') {
+            break
           }
-          this.canTableData.push({ direction: 'recv', canid: arg.canid, frame: arg.frame })
+          // console.log(arg.frame)
+          if (this.canTableData.length > 1000) {
+            this.canTableData.pop()
+          }
+          this.canTableData.unshift({
+            num: this.canNum,
+            time: arg.time,
+            direction: arg.dir === 'r' ? 'recv' : 'send',
+            canid: arg.canid,
+            frame: arg.frame
+          })
+          this.canNum++
           this.$nextTick(() => {
             const container = this.$el.querySelector('.el-table__body-wrapper')
             container.scrollTop = container.scrollHeight
@@ -192,11 +228,23 @@ export default {
           break
         case 'can frame buff':
           // console.log(arg)
+          var newDate = new Date()
           for (let i = 0; i < arg.f.length; i++) {
             if (this.canTableDataCache.length > 1000) {
-              this.canTableDataCache.shift()
+              this.canTableDataCache.pop()
             }
-            this.canTableDataCache.push({ direction: 'recv', canid: arg.id[i], frame: arg.f[i] })
+            if (this.recvChecked === false && arg.d[i] === 'r') {
+              continue
+            }
+            newDate.setTime(arg.t[i] * 1000)
+            this.canTableDataCache.unshift({
+              num: this.canNum,
+              time: newDate.toLocaleString(),
+              direction: arg.d[i] === 'r' ? 'recv' : 'send',
+              canid: this.int2hex(arg.id[i]),
+              frame: arg.f[i]
+            })
+            this.canNum++
           }
           this.canTableData = this.canTableDataCache // 缓存方式刷新缓解了界面刷新卡顿的问题
           break
@@ -208,8 +256,24 @@ export default {
             position: 'bottom-right'
           })
           break
+        case 'can send frame res': // 发送错误反馈
+          if (arg.result !== false) break
+          this.$notify.error({
+            title: 'can 发送错误',
+            message: arg.code,
+            position: 'bottom-left'
+          })
+          break
       }
     })
+  },
+  watch: {
+    // canTableData () {
+    //   this.$nextTick(() => {
+    //     console.log(this.$refs.canTable)
+    //     // this.$refs.canTable.bodyWrapper.scrollTop = this.$refs.canTable.bodyWrapper.scrollHeight
+    //   })
+    // }
   },
   computed: {
     portNextState () {
@@ -226,6 +290,30 @@ export default {
 <style>
 .el-card{
   margin-top: 20px;
+}
+
+.el-table .send-row {
+  background: rgb(236, 193, 193);
+}
+
+.el-table .recv-row {
+  background: #f0f9eb;
+}
+</style>
+
+<style lang="scss">
+.tableBox {
+  width: 100%;
+  th {
+    padding: 0 !important;
+    height: 10px;
+    line-height: 30px;
+  }
+  td {
+    padding: 0 !important;
+    height:30px;
+    line-height: 30px;
+  }
 }
 
 </style>

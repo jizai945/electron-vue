@@ -59,9 +59,9 @@ app.on('window-all-closed', () => {
   // to stay active until the user quits explicitly with Cmd + Q
   if (process.platform !== 'darwin') {
     app.quit()
-    console.log('quit')
-    stopSever() // 关闭服务端
   }
+  console.log('quit')
+  stopSever() // 关闭服务端
 })
 
 app.on('activate', () => {

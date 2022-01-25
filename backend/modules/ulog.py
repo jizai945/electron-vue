@@ -81,7 +81,7 @@ class ULOG(threading.Thread):
             data = ULOG.AQueue.get()
             if type(data) == type("") and data == "EXIT":
                 print('logging exit')
-                return
+                break
 
             self.reSetLog()
             # 解析日志消息，格式：日志级别，内容

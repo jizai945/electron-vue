@@ -7,6 +7,7 @@ import store from './store'
 import './plugins/element.js'
 import './plugins/umy.js'
 import './plugins/wechatTitle.js'
+import './plugins/vueContextMenu.js'
 // import './plugins/sortable.js'
 
 Vue.config.productionTip = false
@@ -19,8 +20,8 @@ if (process.env.NODE_ENV === 'development') {
 
 // 自定义16进制转10进制方法
 Vue.prototype.hex2int = function (hex) {
-  hex = hex.replace('0x', '')
-  hex = hex.replace(' ', '')
+  hex = hex.replace(/0x/g, '')
+  hex = hex.replace(/ /g, '')
   var len = hex.length; var a = new Array(len); var code
   for (var i = 0; i < len; i++) {
     code = hex.charCodeAt(i)

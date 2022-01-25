@@ -18,12 +18,17 @@ from can import Message
 HEAD = 'PUDUMCUFILE'
 file_info_json_len = 1*1024     # 文件描述信息json字符串长度
 json_str_end = '‖'              # json字符串结束符
+can_send_cb = None              # can 发送回调 
+SDO_TIMEOUT = 0.5               # SDO超时时间
+SDO_RETRY = 3                   # SDO失败重试次数
+
 
 def listen_cb(msg):
     print(f'lcb: {msg}')
 
 def my_serial_send(self, msg, timeout=None):
     '''Reconstruction sending method'''
+    global can_send_cb
 
     try:
         a_id = struct.pack('>I', msg.arbitration_id)
@@ -39,7 +44,9 @@ def my_serial_send(self, msg, timeout=None):
     self.ser.write(bytearray(send_array))                           # 发送
     
     print('send:', " ".join([hex(int(i)) for i in send_array]))   # debug 打印
-
+    msg.timestamp = time.time() # 修改发送时间戳
+    if can_send_cb != None:
+        can_send_cb(msg)
 
 def my_recv_internal(self, timeout):
     '''Reconstruction receiving method'''
@@ -71,6 +78,7 @@ def my_recv_internal(self, timeout):
 
 
 def on_emcy(self, can_id, data, timestamp):
+    try:
         code, register, data = EMCY_STRUCT.unpack(data)
         entry = EmcyError(code, register, data, timestamp)
 
@@ -83,8 +91,27 @@ def on_emcy(self, can_id, data, timestamp):
             self.log.append(entry)
             self.emcy_received.notify_all()
 
+        ulog.warn(f'on_emcy: {entry}')
         for callback in self.callbacks:
-            callback(can_id, entry) # 把canid带上，这样知道是哪个节点回调
+            try:
+                callback(can_id, entry) # 把canid带上，这样知道是哪个节点回调
+            except:
+                try:
+                    callback(entry) 
+                except Exception as e:
+                    print(f'on_emcy1: {e}')
+    except Exception as e:
+        print(f'on_emcy2: {e}')
+
+# def emcy_cb(canid:int, text:str):
+#     '''紧急报文回调函数'''
+#     print(type(text))
+#     print(f'emcy cb[id: {canid}]: {text}')
+def emcy_cb_no_id(text:str):
+    '''紧急报文回调函数'''
+    print(type(text))
+    print(text)
+    # print(f'emcy cb[id: {canid}]: {text}')
 
 def serial_port_getlist() -> dict:
     '''
@@ -120,6 +147,7 @@ class SerialCan():
         self.err_cb = None
         self.open_err_desribe = ''   # 打开错误描述
         self.com_name = ''
+        self.speed = 0
 
     def __del__(self):
         print('serial del')
@@ -187,9 +215,47 @@ class SerialCan():
         try:
             node = canopen.RemoteNode(id, eds)
             self.network.add_node(node)
+            node.sdo.RESPONSE_TIMEOUT = SDO_TIMEOUT      # 设置SDO超时时间
+            node.sdo.MAX_RETRIES = SDO_RETRY             # 重试次数
+
+            # node.tpdo.read()
+            # # Re-map TPDO[1]
+            # # node.tpdo[2].clear()
+            # # node.tpdo[2].add_variable(0x6001, 1)
+            # # # # node.tpdo[2].add_variable(0x6000, 2)
+            # # # # node.tpdo[2].add_variable(0x6000, 3)
+            # # # # node.tpdo[2].add_variable(0x6000, 5)
+            # # # node.tpdo[2].trans_type = 4
+            # # # node.tpdo[2].event_timer = 10
+            # # # node.tpdo[2].enabled = True
+            # # # # Save new PDO configuration to node
+            # # node.tpdo[2].save()
+
+            # # Transmit SYNC every 1000 ms
+            # self.network.sync.start(1)
+
+            # # Change state to operational (NMT start)
+            # node.nmt.state = 'OPERATIONAL'
+
+            # # Read a value from TPDO[1]
+            # node.tpdo[2].wait_for_reception()
+            # self.speed = node.tpdo[2]['mcu file upload parameters.upload_state'].raw
+
+            # node.rpdo.read()
+            # # node.rpdo[2]['mcu file upload parameters.upload_state'].raw = 0x80
+            # # node.rpdo[2].transmit()
+            # # node.rpdo[2]['mcu file upload parameters.upload reset'].raw = 0x0
+            # # node.rpdo[2]['mcu file upload parameters.proxy decryption'].raw = 0x1
+            # # node.rpdo[2]['mcu file upload parameters.data crc'].raw = 0x12345678
+            # node.rpdo[2].trans_type = 4
+            # # node.rpdo[2].start(0.1)
+            # # node.rpdo[2].transmit()
+            # node.rpdo[2].save()
+            
         except Exception as e:
             print(traceback.format_exc())
-            return False, str(traceback.format_exc())
+            # return False, str(traceback.format_exc())
+            return False, str(e)
         return True, ''
 
     def remove_canopen_node(self, id: int) -> bool:
@@ -238,10 +304,10 @@ class SerialCan():
 
             node = self.network.nodes[canid]
             # 重构对象方法
-            node.on_emcy = types.MethodType(on_emcy, self.network.nodes[canid])  # 重构紧急报文
+            # node.on_emcy = types.MethodType(on_emcy, node)  # 重构紧急报文
             # 紧急报文回调函数
             if len(node.emcy.callbacks) == 0:
-                node.emcy.add_callback(self.emcy_cb)
+                node.emcy.add_callback(emcy_cb_no_id)
 
             # 重置状态为upload状态
             node.sdo[0x6000][2].raw = 1
@@ -269,6 +335,7 @@ class SerialCan():
             node.sdo[0x6000][5].raw = crc32_bytes(data)
             ulog.debug('send info json start')
             # 写入文件
+            print(len(data))
             file_size = len(data)
             file_offset = 0
             file_pack_max_size = 512
@@ -279,6 +346,8 @@ class SerialCan():
                 file_offset += size
 
             ulog.debug('send info json sucess')
+
+            # return True, ''
 
             # 判断是否有紧急报文crc32出错 和 是否不支持的文件描述的紧急报文
             # TODO
@@ -293,16 +362,36 @@ class SerialCan():
                     ulog.debug('node enter recv file state')
                     break
                 elif times == 0:
-                    ulog.debug('node not entry info recv state')
-                    return (False, 'node not entry info recv state')
+                    ulog.debug('node not entry recv file state')
+                    return (False, 'node not entry recv file state')
                 time.sleep(0.5)
 
+            last_offset = -1
+            last_len = -1
             while True:
-                # 读取块数据位置
-                offset = node.sdo[0x6000][6].raw
-                # 块长度
-                block_len = node.sdo[0x6000][7].raw
-                ulog.debug(f'upload file offset: {offset} len: {block_len}')
+                times = 10
+                while times > 0:
+                    times -= 1
+                    # 读取块数据位置
+                    offset = node.sdo[0x6000][6].raw
+                    # 块长度
+                    block_len = node.sdo[0x6000][7].raw
+                    ulog.debug(f'send file offset: {offset} len: {block_len}')
+                    if offset == last_offset and block_len == last_len:
+                        time.sleep(0.1)
+                        continue
+                    else:
+                        last_offset = offset
+                        last_len = block_len
+                        break
+
+                if times <= 0:
+                    s = '10 times offset and len same'
+                    ulog.error(s)
+                    return (False, s)
+
+
+                ulog.debug(f'start upload file offset: {offset} len: {block_len}')
 
                 # 读取偏移的文件
                 with open(file, 'rb') as f:
@@ -311,11 +400,22 @@ class SerialCan():
 
                  # 写入文件描述信息的crc32值
                 node.sdo[0x6000][5].raw = crc32_bytes(data)
+                ulog.debug(f'file crc: {hex(crc32_bytes(data))}')
 
                 # 写入文件
-                with node.sdo[0x6000][4].open('wb', size=len(data), block_transfer=True) as fp:
-                    fp.write(data)
+                print(len(data))
+                file_size = len(data)
+                file_offset = 0
+                file_pack_max_size = 512
+                while file_offset < file_size:
+                    size = file_pack_max_size if (file_offset + file_pack_max_size) < file_size else file_size - file_offset
+                    with node.sdo[0x6000][4].open('wb', size=size, block_transfer=True) as fp:
+                        fp.write(data[file_offset:file_offset+size])
+                    file_offset += size
+                # with node.sdo[0x6000][4].open('wb', size=len(data), block_transfer=True) as fp:
+                #     fp.write(data)
 
+                ulog.debug(f'upload file success offset: {offset} len: {block_len}')
                 time.sleep(1)
                 # 判断是否退出文件升级模式
                 if node.sdo[0x6000][1].raw != 0x02:
@@ -344,9 +444,15 @@ class SerialCan():
         '''覆盖数据接收回调'''
         self.network.listeners[1] = cb
 
-    def emcy_cb(self, canid:int, text:str):
-        '''紧急报文回调函数'''
-        print(f'emcy cb[id: {canid}]: {text}')
+        # for debug print data
+        for cb in self.network.listeners:
+            if cb == listen_cb:
+                return
+        self.add_recv_cb(listen_cb)
+
+    def set_send_cb(self, cb):
+        global can_send_cb
+        can_send_cb = cb
 
     def get_connect_state(self) -> bool:
         '''获取连接状态'''
@@ -356,6 +462,7 @@ class SerialCan():
         '''检查串口运行异常, 并终止串口'''
         while True:
             time.sleep(1)
+            # print(f'speed: {self.speed}')
 
             if self.serial_state:
                 try:
@@ -373,46 +480,42 @@ class SerialCan():
 
 if __name__ == '__main__':
     COM_PORT = 'COM6'
-
+    ulog.init("serial_canopen", "DEBUG")
     # example 1
 
-    # try:
-    #     # Start with creating a network representing one CAN bus
-    #     network = canopen.Network()
+    try:
+        # Start with creating a network representing one CAN bus
+        network = canopen.Network()
 
-    #     # Add some nodes with corresponding Object Dictionaries
-    #     node = canopen.RemoteNode(6, './eds/CANopenSocket.eds')
-    #     network.add_node(node)
-    #     node2 = canopen.RemoteNode(7, './eds/e35.eds')
-    #     network.add_node(node2)
+        # Add some nodes with corresponding Object Dictionaries
+        node = canopen.RemoteNode(6, 'C:\\Users\\Wang\\Desktop\\e35-pudu.eds')
+        network.add_node(node)
+        # node2 = canopen.RemoteNode(7, './eds/e35.eds')
+        # network.add_node(node2)
 
-    #     # Add some nodes with corresponding Object Dictionaries
-    #     network.connect(bustype="serial",  channel=COM_PORT)
-    #     network.bus.send = types.MethodType(my_serial_send, network.bus)  # 重构发送方法
-    #     network.bus._recv_internal = types.MethodType(my_recv_internal, network.bus)  # 重构接收方法
+        # Add some nodes with corresponding Object Dictionaries
+        network.connect(bustype="serial",  channel=COM_PORT)
+        network.bus.send = types.MethodType(my_serial_send, network.bus)  # 重构发送方法
+        network.bus._recv_internal = types.MethodType(my_recv_internal, network.bus)  # 重构接收方法
 
-    #     network.listeners.append(listen_cb)                 # 添加一个监听回调函数
+        network.listeners.append(listen_cb)                 # 添加一个监听回调函数
 
-    #     # send test message
-    #     network.send_message(0x06, bytes([0x11, 0x22]))
+        # send test message
+        network.send_message(0x06, bytes([0x11, 0x22]))
 
-    #     # node = canopen.RemoteNode(6, './backend/eds/CANopenSocket.eds')
-    #     # network.add_node(node)
-    #     # node2 = canopen.RemoteNode(7, './backend/eds/e35.eds')
-    #     # network.add_node(node2)
+        # node = canopen.RemoteNode(6, './backend/eds/CANopenSocket.eds')
+        # network.add_node(node)
+        # node2 = canopen.RemoteNode(7, './backend/eds/e35.eds')
+        # network.add_node(node2)
 
-    #     print('-'*30)
-    #     tick = 30
-    #     while tick > 0:
-    #         network.check()
-    #         time.sleep(1)
+        print('-'*30)
+        tick = 30
+        while tick > 0:
+            network.check()
+            time.sleep(1)
 
-    #     network.sync.stop()
-    #     network.disconnect()
-
-    # except Exception as e:
-    #     print(traceback.format_exc())
-    #     print('can err')
+        network.sync.stop()
+        network.disconnect()
 
     # example 2
     # try:
@@ -460,20 +563,21 @@ if __name__ == '__main__':
     #     print('can err')
 
     # example 3 download file
-    try:
-        serial_obj = SerialCan()   # 初始化对象
-        serial_obj.set_err_cb(lambda str: print) # 设置异常回调
-        serial_obj.open(COM_PORT)       # 打开com口
-        print(serial_obj.get_connect_state())
+    # try:
+    #     serial_obj = SerialCan()   # 初始化对象
+    #     serial_obj.set_err_cb(lambda str: print) # 设置异常回调
+    #     serial_obj.open(COM_PORT)       # 打开com口
+    #     print(serial_obj.get_connect_state())
 
-        # node = canopen.RemoteNode(6, 'C:\\Users\\Wang\\Desktop\\e35-pudu.eds')
-        node = canopen.RemoteNode(6, './e35-pudu.eds')
-        serial_obj.network.add_node(node)
+    #     # node = canopen.RemoteNode(6, 'C:\\Users\\Wang\\Desktop\\e35-pudu.eds')
+    #     node = canopen.RemoteNode(6, './e35-pudu.eds')
+    #     serial_obj.network.add_node(node)
 
-        serial_obj.network.nodes[6].sdo.MAX_RETRIES = 3             # 重试次数
-        serial_obj.network.nodes[6].sdo.RESPONSE_TIMEOUT = 0.3      # 设置超时时间
+    #     serial_obj.network.nodes[6].sdo.MAX_RETRIES = 3             # 重试次数
+    #     serial_obj.network.nodes[6].sdo.RESPONSE_TIMEOUT = 0.3      # 设置超时时间
 
-        serial_obj.start_upload_func(6, './test.bin')
+    #     res, str = serial_obj.start_upload_func(6, './test.bin')
+    #     print(f'upload: {res}')
 
     # example 4 upload 
     # try:
@@ -532,3 +636,6 @@ if __name__ == '__main__':
     except Exception as e:
         print(traceback.format_exc())
         print('can err')
+
+    finally:
+        ulog.exit()
