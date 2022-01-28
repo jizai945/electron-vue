@@ -141,30 +141,33 @@ def serial_port_getlist() -> dict:
 # can的串口类
 class SerialCan():
     def __init__(self):
-        self.serial_state = False # 串口状态 True连接  False断开
+        self.serial_state = False           # 串口状态 True连接  False断开
         self.network = canopen.Network()
-        self.add_recv_cb(listen_cb)     # 设置接收数据回调，调试用
+        self.add_recv_cb(listen_cb)         # 设置接收数据回调，调试用
         self.err_cb = None
-        self.open_err_desribe = ''   # 打开错误描述
+        self.open_err_desribe = ''          # 打开错误描述
         self.com_name = ''
         self.speed = 0
+        self._sdo_auto_list = []             # sdo自动刷新列表
 
     def __del__(self):
         print('serial del')
 
     def __check_thread_stop(self):
         try:
-            thread_exit(self.check_thread)
+            thread_exit(self._check_thread)
         except:
             pass
 
     def __check_thread_run(self):
         self.__check_thread_stop()
-        self.check_thread = thread_run(self.check_run)
+        self._check_thread = thread_run(self.check_run)
 
     def close(self):
         '''断开串口'''
+        self.__sdo_read_thread_stop()
         self.__check_thread_stop()
+        self._sdo_auto_list.clear()
         try:
             # self.network.bus.flushInput()
             self.network.sync.stop()
@@ -275,11 +278,64 @@ class SerialCan():
         # ！！！ 这里没有做异常捕获, 读取错误时会把异常抛出，需要外面做异常捕获
         return self.network.nodes[id][name]
 
-
-    def read_sdo_by_idx(self, id, idx:int, subindx:int) -> str:
+    def read_sdo_by_idx(self, id:int, idx:int, subindx:int = -1) -> str:
         '''通过字典索引读取sdo数据'''
         # ！！！ 这里没有做异常捕获, 读取错误时会把异常抛出，需要外面做异常捕获
-        return self.network.nodes[id][idx][subindx]
+        if (subindx < 0):
+            return self.network.nodes[id].sdo[idx].raw
+        return self.network.nodes[id].sdo[idx][subindx].raw
+
+    def open_auto_read_sdo_by_id(self, id:int) -> Tuple[bool, str]:
+        '''打开指定canid的自动读取sdo数据'''
+        if id not in self.network.nodes:
+            return False, f'canID: {id} not load eds file'
+
+        if id not in self._sdo_auto_list:
+            self._sdo_auto_list.append(id)
+
+        # 打开读取线程
+        if ('_read_sdo_thread') in dir(self):
+            return True, ''
+
+        def sdo_auto_read_run():
+            while True:
+                print('start read test')
+
+                for sdo_id in self._sdo_auto_list:
+                    print(sdo_id)
+                    try:
+                        for obj in self.network.nodes[sdo_id].object_dictionary.values():
+                            print('0x%X: %s' % (obj.index, obj.name))
+                            self.read_sdo_by_idx(sdo_id, obj.index)
+
+                            if isinstance(obj, canopen.objectdictionary.Record):
+                                for subobj in obj.values():
+                                    print('  %d: %s' % (subobj.subindex, subobj.name))
+                                    self.read_sdo_by_idx(sdo_id, obj.index, subobj.subindex)
+                        
+                    except Exception as e:
+                        print(e)
+                        continue
+
+                print('*'*30)
+                time.sleep(1)
+            
+        self._read_sdo_thread = thread_run(sdo_auto_read_run)
+        return True, ''
+
+    def __sdo_read_thread_stop(self):
+        '''关闭sdo读取线程'''
+        try:
+            thread_exit(self._read_sdo_thread)
+        except:
+            pass
+
+    def close_auto_read_sdo_by_id(self, id:int) -> Tuple[bool, str]:
+        '''关闭指定canid的自动读取sdo数据'''
+        if id in self._sdo_auto_list:
+            self._sdo_auto_list.remove(id)
+        
+        return True, ''
 
     def start_upload_func(self, canid:int, file:str) -> Tuple[bool, str]:
         '''
@@ -488,7 +544,8 @@ if __name__ == '__main__':
         network = canopen.Network()
 
         # Add some nodes with corresponding Object Dictionaries
-        node = canopen.RemoteNode(6, 'C:\\Users\\Wang\\Desktop\\e35-pudu.eds')
+        # node = canopen.RemoteNode(6, 'C:\\Users\\Wang\\Desktop\\e35-pudu.eds')
+        node = canopen.RemoteNode(6, 'C:\\Users\\Wang\\Desktop\\demo.eds')
         network.add_node(node)
         # node2 = canopen.RemoteNode(7, './eds/e35.eds')
         # network.add_node(node2)
@@ -508,10 +565,29 @@ if __name__ == '__main__':
         # node2 = canopen.RemoteNode(7, './backend/eds/e35.eds')
         # network.add_node(node2)
 
+        for obj in node.object_dictionary.values():
+            print('0x%X: %s' % (obj.index, obj.name))
+            if isinstance(obj, canopen.objectdictionary.Record):
+                for subobj in obj.values():
+                    print('  %d: %s' % (subobj.subindex, subobj.name))
+
+
+        # print(node.sdo[0x1018].raw)  
+        serial_obj = SerialCan()   # 初始化对象
+        serial_obj.open_auto_read_sdo_by_id(6)
+        # print(node.sdo['Dummy0001'].raw)
+        # print(dir(node))
+        # print(dir(node.object_dictionary))
+        # print(node.object_dictionary.names)
+        # print(node.object_dictionary.update)
+        exit(0)
         print('-'*30)
         tick = 30
         while tick > 0:
             network.check()
+            print(node == network.nodes[6])
+            # print(node.sdo[0x60C4][4].raw)
+            # print(node.sdo[0x60E0].raw)
             time.sleep(1)
 
         network.sync.stop()

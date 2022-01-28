@@ -18,6 +18,14 @@ def msg_hello_process(send_fd:object, recv:dict):
     tcp_send(send_fd, json.dumps({'msg':'hello res'}))
     ulog.debug(f'[server]: py -> js: "msg":"hello res"')
 
+def check_serial_state(serial_obj) -> bool:
+    '''检查串口状态'''
+    return False if serial_obj == None else True
+
+def check_canopen_state(serial_obj) -> bool:
+    '''检查canopen状态'''
+    return False if ( serial_obj == None or not serial_obj.get_connect_state() ) else  True
+
 def msg_fresh_port_process(send_fd:object, recv:dict):
     '''端口刷新处理'''
     port_dict = serial_can.serial_port_getlist()
@@ -50,7 +58,7 @@ def msg_port_open_process(send_fd:object, recv:dict):
     global serial_obj
     global global_client_fd
     com = recv['port']
-    if serial_obj != None:
+    if check_serial_state(serial_obj) != False:
         serial_obj.close()      # 关闭
         del serial_obj          # 删除对象
 
@@ -69,14 +77,14 @@ def msg_port_open_process(send_fd:object, recv:dict):
 def msg_port_close_process(send_fd:object, recv:dict):
     '''端口关闭处理'''
     global serial_obj
-    if serial_obj != None:
+    if check_serial_state(serial_obj) != False:
         serial_obj.close()      # 关闭
     #  关闭串口不需要应答
 
 def msg_can_send_frame(send_fd:object, recv:dict):
     '''can发送一帧数据'''
     global serial_obj
-    if serial_obj == None:
+    if check_serial_state(serial_obj) == False:
         send = {'msg':'can send frame res'}
         send['result'] = False
         send['code'] = 'can未打开' # 错误描述
@@ -94,9 +102,9 @@ def msg_can_send_frame(send_fd:object, recv:dict):
     except Exception as e:
         # 错误才反馈
         print(e)
-        send = {'msg':'can send frame res'}
-        send['result'] = False
-        send['code'] = str(e) # 错误描述
+        send = {'msg':'can send frame res',
+                'result': False,
+                'code': str(e)} # 错误描述
         tcp_send(send_fd, json.dumps(send))
         ulog.debug(f'[server]: py -> js: {send}')
 
@@ -106,18 +114,18 @@ def msg_canopen_add_node(send_fd:object, recv:dict):
     global serial_obj
     id = recv['node']
     path = recv['eds']
-    if serial_obj == None or not serial_obj.get_connect_state():
-        send = {'msg':'canopen add node res'}
-        send['result'] = False
-        send['id'] = id
-        send['describe'] = 'can 已断开'
+    if check_canopen_state(serial_obj) == False:
+        send = {'msg':'canopen add node res',
+                'result': False,
+                'id': id,
+                'describe': 'can 已断开'}
         tcp_send(send_fd, json.dumps(send))
         return
     res, des = serial_obj.add_canopen_node(id, path)
-    send = {'msg':'canopen add node res'}
-    send['result'] = res
-    send['id'] = id
-    send['describe'] = des
+    send = {'msg':'canopen add node res',
+            'result': res,
+            'id': id,
+            'describe': des}
     tcp_send(send_fd, json.dumps(send))
     ulog.debug(f'[server]: py -> js: {send}')
 
@@ -125,18 +133,18 @@ def msg_canopen_remove_node(send_fd:object, recv:dict):
     '''canopen 节点移除'''
     global serial_obj
     id = recv['node']
-    if serial_obj == None or not serial_obj.get_connect_state():
-        send = {'msg':'canopen remove node res'}
-        send['result'] = False
-        send['id'] = id
-        send['describe'] = 'can 已断开'
+    if check_canopen_state(serial_obj) == False:
+        send = {'msg':'canopen remove node res',
+                'result': False,
+                'id': id,
+                'describe': 'can 已断开'}
         tcp_send(send_fd, json.dumps(send))
         return
 
     result = serial_obj.remove_canopen_node(id)
-    send = {'msg':'canopen remove node res'}
-    send['result'] = result
-    send['id'] = id
+    send = {'msg':'canopen remove node res',
+            'result': result,
+            'id': id}
     tcp_send(send_fd, json.dumps(send))
     ulog.debug(f'[server]: py -> js: {send}')
 
@@ -146,11 +154,11 @@ def msg_canopen_node_upload(send_fd: object, recv: dict):
     id = recv['id']
     file = recv['file']
 
-    if serial_obj == None or not serial_obj.get_connect_state():
-        send = {'msg':'canopen upload start res'}
-        send['result'] = False
-        send['id'] = id
-        send['describe'] = 'can 已断开'
+    if check_canopen_state(serial_obj) == False:
+        send = {'msg':'canopen upload start res',
+                'result': False,
+                'id': id,
+                'describe': 'can 已断开'}
         tcp_send(send_fd, json.dumps(send))
         return
     
@@ -160,16 +168,83 @@ def msg_canopen_node_upload(send_fd: object, recv: dict):
         id = kwargs['id']
         file = kwargs['file']
         res, des = serial_obj.start_upload_func(id, file)
-        send = {'msg':'canopen upload start res'}
-        send['result'] = res
-        send['id'] = id
-        send['describe'] = des
+        send = {'msg':'canopen upload start res',
+                'result': res,
+                'id': id,
+                'describe': des}
         tcp_send(send_fd, json.dumps(send))
         ulog.debug(f'[server]: py -> js: {send}')
 
     thread_run(uplaod_run_func, id=id, file=file)
     
+def msg_canopen_read_sdo(send_fd: object, recv: dict):
+    '''canopen 读取sdo数据'''
+    if check_canopen_state(serial_obj) == False:
+        send = {'msg':'canopen read sdo res', 
+                'result':False,
+                'id': recv['id'],
+                'idx': recv['idx'],
+                'subIdx': recv['subIdx'],
+                'describe': 'can 已断开'}
+        tcp_send(send_fd, json.dumps(send))
+        return
 
+    id = recv['id']
+    idx = int(recv['idx'], 16)
+    subIdx = int(recv['subIdx'], 16) if recv['subIdx'] != '' else -1
+    # 开线程去处理
+    def read_sdo_func(*args, **kwargs):
+        id = kwargs['id']
+        idx = kwargs['idx']
+        subIdx = kwargs['subIdx']
+        send = {'msg':'canopen read sdo res', 
+                'result':True,
+                'id': recv['id'],
+                'idx': recv['idx'],
+                'subIdx': recv['subIdx']}
+        try:
+            data = serial_obj.read_sdo_by_idx(id, idx, subIdx)
+            send['data'] = str(data)
+        except Exception as e:
+            print(e)
+            send['result'] = False
+            send['describe'] = str(e)     
+        tcp_send(send_fd, json.dumps(send))
+
+    thread_run(read_sdo_func, id=id, idx=idx, subIdx=subIdx)
+
+def msg_canopen_auto_sdo(send_fd: object, recv: dict):
+    '''打开/关闭 自动读取sdo数据'''
+    state = recv['state']
+    if check_canopen_state(serial_obj) == False:
+        if  state == 'open':
+            send = {'msg':'canopen auto sdo res', 
+                    'result': False,
+                    'state': state,
+                    'id': recv['id'],
+                    'describe': 'can 已断开'}
+            tcp_send(send_fd, json.dumps(send))
+        else:
+            send = {'msg':'canopen auto sdo res', 
+                    'result': True,
+                    'state': state,
+                    'id': recv['id'],
+                    'describe': ''}
+            tcp_send(send_fd, json.dumps(send))
+        return
+
+    id = recv['id']
+    if state == 'open':
+        result, describe = serial_obj.open_auto_read_sdo_by_id(id)
+    else:
+        result, describe = serial_obj.close_auto_read_sdo_by_id(id)
+
+    send = {'msg':'canopen auto sdo res', 
+                    'result':result,
+                    'state': state,
+                    'id': recv['id'],
+                    'describe': describe}
+    tcp_send(send_fd, json.dumps(send))
 
 # -----------------------------------------------------------------
 
@@ -185,6 +260,8 @@ js2pyMsgCb = {
     'canopen add node': msg_canopen_add_node,           # 添加can节点
     'canopen remove node': msg_canopen_remove_node,     # 删除canopen节点
     'canopen upload start': msg_canopen_node_upload,    # canopen节点升级 
+    'canopen read sdo': msg_canopen_read_sdo,           # 通过sdo读取数据
+    'canopen auto sdo': msg_canopen_auto_sdo,           # 自动读取sdo 打开/关闭
 }
 
 def tcp_msg_process_cb(rv:str, send_fd:object):

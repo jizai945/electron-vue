@@ -210,21 +210,18 @@ export default {
             break
           }
           // console.log(arg.frame)
-          if (this.canTableData.length > 1000) {
-            this.canTableData.pop()
+          if (this.canTableDataCache.length > 10) {
+            this.canTableDataCache.pop()
           }
-          this.canTableData.unshift({
+          this.canTableDataCache.unshift({
             num: this.canNum,
             time: arg.time,
-            direction: arg.dir === 'r' ? 'recv' : 'send',
+            direction: arg.d[i] === 'r' ? 'recv' : 'send',
             canid: arg.canid,
             frame: arg.frame
           })
           this.canNum++
-          this.$nextTick(() => {
-            const container = this.$el.querySelector('.el-table__body-wrapper')
-            container.scrollTop = container.scrollHeight
-          })
+          this.canTableData = this.canTableDataCache // 缓存方式刷新缓解了界面刷新卡顿的问题
           break
         case 'can frame buff':
           // console.log(arg)

@@ -89,6 +89,13 @@ export default {
               url: 'Other/PageTwo'
             }
           ]
+        },
+        {
+          path: '/message',
+          name: 'message',
+          label: '消息盒子',
+          icon: 'bell',
+          url: 'Message/Message'
         }
       ]
     }
@@ -139,7 +146,8 @@ export default {
 
 <style lang="scss" scoped>
 .el-menu {
-  height: 150vh;
+  min-height: 100vh;
+  height: 100%;
   border: none;
   h3 {
     color: #000000;
