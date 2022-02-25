@@ -1,9 +1,13 @@
+from cgitb import reset
 import json
 import traceback
+import struct
 import modules.serial_canopen as serial_can
 from modules.sub_thread import *
 from . import ulog
 from .serial_canopen import SerialCan
+from modules.mcupack_process import start_pack
+from modules.eds2c import EdsToC
 
 serial_obj = None
 global_client_fd = None
@@ -60,7 +64,7 @@ def msg_port_open_process(send_fd:object, recv:dict):
     com = recv['port']
     if check_serial_state(serial_obj) != False:
         serial_obj.close()      # 关闭
-        del serial_obj          # 删除对象
+        serial_obj = None        # 删除对象
 
     global_client_fd = send_fd
     serial_obj = SerialCan()
@@ -79,6 +83,7 @@ def msg_port_close_process(send_fd:object, recv:dict):
     global serial_obj
     if check_serial_state(serial_obj) != False:
         serial_obj.close()      # 关闭
+        serial_obj = None
     #  关闭串口不需要应答
 
 def msg_can_send_frame(send_fd:object, recv:dict):
@@ -187,6 +192,7 @@ def msg_canopen_read_sdo(send_fd: object, recv: dict):
                 'subIdx': recv['subIdx'],
                 'describe': 'can 已断开'}
         tcp_send(send_fd, json.dumps(send))
+        ulog.debug(f'[server]: py -> js: {send}')
         return
 
     id = recv['id']
@@ -205,16 +211,25 @@ def msg_canopen_read_sdo(send_fd: object, recv: dict):
         try:
             data = serial_obj.read_sdo_by_idx(id, idx, subIdx)
             send['data'] = str(data)
+            print(f'read sucess: {data}')
         except Exception as e:
             print(e)
             send['result'] = False
-            send['describe'] = str(e)     
+            send['describe'] = str(e)   
         tcp_send(send_fd, json.dumps(send))
+        ulog.debug(f'[server]: py -> js: {send}')
 
     thread_run(read_sdo_func, id=id, idx=idx, subIdx=subIdx)
 
+def canopen_auto_sdo_recv_cb(id:int, sdo:dict):
+    '''canopen 自动sdo读取成功回调'''
+    send = {'msg': 'canopen auto sdo recv res', 'id':id, 'sdo':sdo}
+    tcp_send(global_client_fd, json.dumps(send))
+    ulog.debug(f'[server]: py -> js: {send}')
+
 def msg_canopen_auto_sdo(send_fd: object, recv: dict):
     '''打开/关闭 自动读取sdo数据'''
+    global serial_obj
     state = recv['state']
     if check_canopen_state(serial_obj) == False:
         if  state == 'open':
@@ -231,10 +246,12 @@ def msg_canopen_auto_sdo(send_fd: object, recv: dict):
                     'id': recv['id'],
                     'describe': ''}
             tcp_send(send_fd, json.dumps(send))
+        ulog.debug(f'[server]: py -> js: {send}')
         return
 
     id = recv['id']
     if state == 'open':
+        serial_obj.set_auto_sdo_recv_cb(canopen_auto_sdo_recv_cb)
         result, describe = serial_obj.open_auto_read_sdo_by_id(id)
     else:
         result, describe = serial_obj.close_auto_read_sdo_by_id(id)
@@ -245,6 +262,84 @@ def msg_canopen_auto_sdo(send_fd: object, recv: dict):
                     'id': recv['id'],
                     'describe': describe}
     tcp_send(send_fd, json.dumps(send))
+    ulog.debug(f'[server]: py -> js: {send}')
+
+def msg_canopen_sdo_change(send_fd: object, recv: dict): 
+    '''sdo写'''
+    
+    global serial_obj
+    if check_canopen_state(serial_obj) == False:
+        send = {'msg':'canopen sdo data change res', 
+                'result':False,
+                'id': recv['id'],
+                'idx': recv['idx'],
+                'subIdx': recv['subIdx'],
+                'describe': 'can 已断开'}
+        tcp_send(send_fd, json.dumps(send))
+        ulog.debug(f'[server]: py -> js: {send}')
+        return
+
+    id = recv['id']
+    idx = int(recv['idx'], 16)
+    subIdx = int(recv['subIdx'], 16) if recv['subIdx'] != '' else -1
+    data = recv['data']
+    type = recv['type']
+    # 开线程去处理
+    def read_sdo_func(*args, **kwargs):
+        send = {'msg':'canopen sdo data change res', 
+                'result':True,
+                'id': recv['id'],
+                'idx': recv['idx'],
+                'subIdx': recv['subIdx']}
+                
+        id = kwargs['id']
+        idx = kwargs['idx']
+        subIdx = kwargs['subIdx']
+        type = kwargs['type']
+        try:
+            data = kwargs['data']
+            if type == 'int':
+                # data = struct.pack('<L', int(data))
+                data = int(data)
+            else:
+                data = data.encode('ascii')
+            serial_obj.write_sdo_by_idx(data, id, idx, subIdx)
+        except Exception as e:
+            print(e)
+            send['result'] = False
+            send['describe'] = str(e)   
+        tcp_send(send_fd, json.dumps(send))
+        ulog.debug(f'[server]: py -> js: {send}')
+
+    thread_run(read_sdo_func, id=id, idx=idx, subIdx=subIdx, data=data, type=type)
+
+def msg_pack_mcu_file(send_fd: object, recv: dict):
+    '''打包'''
+    send = {'msg':'pack res', 
+                'result':True,
+                'describe': ''}
+    try:
+        ret = start_pack(recv)
+    except Exception as e:
+        ret = False
+        send['describe'] = str(e)
+    send['result'] = ret
+    
+    tcp_send(send_fd, json.dumps(send))
+    ulog.debug(f'[server]: py -> js: {send}')
+
+def msg_eds_convert(send_fd: object, recv: dict):
+    '''eds转换工具'''
+    send = {'msg':'eds convert res', 
+                'result':True,
+                'describe': ''}
+    
+    e = EdsToC(recv['data']['eds'], recv['data']['runtime'], recv['data']['user'])
+    send['result'] = e.start_convert()
+    send['describe'] = e.get_err()
+
+    tcp_send(send_fd, json.dumps(send))
+    ulog.debug(f'[server]: py -> js: {send}')
 
 # -----------------------------------------------------------------
 
@@ -262,6 +357,9 @@ js2pyMsgCb = {
     'canopen upload start': msg_canopen_node_upload,    # canopen节点升级 
     'canopen read sdo': msg_canopen_read_sdo,           # 通过sdo读取数据
     'canopen auto sdo': msg_canopen_auto_sdo,           # 自动读取sdo 打开/关闭
+    'canopen sdo data change': msg_canopen_sdo_change,  # 通过sdo修改数据
+    'start pack': msg_pack_mcu_file,                    # 打包mcu文件
+    'eds convert': msg_eds_convert,                     # eds 转换消息
 }
 
 def tcp_msg_process_cb(rv:str, send_fd:object):

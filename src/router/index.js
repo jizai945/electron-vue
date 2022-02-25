@@ -23,9 +23,25 @@ const routes = [
         }
       },
       {
-        path: '/',
+        path: '/canopen',
         name: 'canopen',
         component: () => import('@/views/Can/Canopen'),
+        meta: {
+          keepAlive: true
+        }
+      },
+      {
+        path: '/eds2c',
+        name: 'eds2c',
+        component: () => import('@/views/Can/CanopenEds2C'),
+        meta: {
+          keepAlive: true
+        }
+      },
+      {
+        path: '/McuPack',
+        name: 'mcupack',
+        component: () => import('@/views/McuPack/Pack'),
         meta: {
           keepAlive: true
         }
@@ -35,7 +51,7 @@ const routes = [
         name: 'home',
         component: () => import('@/views/Home/Home'),
         meta: {
-          keepAlive: true
+          keepAlive: false
         }
       },
       {
@@ -57,6 +73,14 @@ const routes = [
     path: '/canopenSub',
     name: 'CanopenSub',
     component: () => import('@/views/Can/CanopenSub'),
+    meta: {
+      title: '标题'
+    }
+  },
+  {
+    path: '/version',
+    name: 'Version',
+    component: () => import('@/views/Menu/Version'),
     meta: {
       title: '标题'
     }

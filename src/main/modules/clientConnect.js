@@ -7,28 +7,39 @@ const cmdList = (process.env.NODE_ENV === 'development') ? ['python', './backend
 const PORT = 9998
 const client = new net.Socket()
 const TCPEND = '|END' // TCP结束符
-var restartTime
+var restartTime = ''
+var closeTime = ''
 
 // console.log(cmd)
 function startServerUp (cb = undefined) {
   // client.setTimeout(1000) // 多久不活动将关闭连接
 
   cmd.run_shell(cmdList)
-  // 等待服务端起来1s后再连接
+  // 等待服务端起来后再连接
   setTimeout(() => {
     client.connect(PORT, 'localhost')
     client.setEncoding('utf8')
 
     client.on('error', (e) => {
-      console.log(e)
-      restartTime = setTimeout(() => {
-        cmd.run_shell(cmdList)
-      }, 1000)
+      console.log('on err:' + e)
+      if (restartTime === '') {
+        restartTime = setTimeout(() => {
+          cmd.run_shell(cmdList)
+          restartTime = ''
+        }, 3000)
+      }
     })
 
     client.on('ready', () => {
       try {
         clearTimeout(restartTime)
+        restartTime = ''
+      } catch (err) {
+        console.log(err)
+      }
+      try {
+        clearTimeout(closeTime)
+        closeTime = ''
       } catch (err) {
         console.log(err)
       }
@@ -45,12 +56,15 @@ function startServerUp (cb = undefined) {
 
     client.on('close', (data) => {
       console.log('client on close: ' + data)
-      setTimeout(() => {
-        client.destroy()
-        client.connect(PORT, 'localhost')
-      }, 1000)
+      if (closeTime === '') {
+        closeTime = setTimeout(() => {
+          closeTime = ''
+          client.destroy()
+          client.connect(PORT, 'localhost')
+        }, 1000)
+      }
     })
-  }, 1000)
+  }, 3000)
 }
 
 function stopSever () {

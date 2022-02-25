@@ -6,6 +6,7 @@ from twisted.internet import reactor
 from modules import ulog
 import socket
 import can.interfaces.serial.serial_can
+from time import sleep
  
 SERVER_PORT = 9998
 process_cb = None
@@ -46,6 +47,9 @@ def main(cb = None):
         client.close()
     except Exception as e:
         print(e)
+    
+    sleep(0.5) # wait
+    
     try:
         global process_cb
         process_cb = cb

@@ -15,8 +15,10 @@ CMD.EXE /C call del /s /Q dist_electron\pudu-can-tool-%version%-%date:~0,4%-%dat
 CMD.EXE /C call rd /s /q dist_electron\pudu-can-tool-%version%-%date:~0,4%-%date:~5,2%-%date:~8,2%
 cd .\backend\
 CMD.EXE /C call pyinstaller -Fw backend_up.py
+CMD.EXE /C call python installer.py
 cd ..
 CMD.EXE /C call yarn run electron:build
 CMD.EXE /C call md dist_electron\win-ia32-unpacked\backend\dist
-CMD.EXE /C call copy backend\dist\backend_up.exe dist_electron\win-ia32-unpacked\backend\dist\backend_up.exe
+CMD.EXE /C call copy backend\dist\ dist_electron\win-ia32-unpacked\backend\dist\
+CMD.EXE /C call copy .\update.json dist_electron\win-ia32-unpacked\
 CMD.EXE /C call ren dist_electron\win-ia32-unpacked pudu-can-tool-%version%-%date:~0,4%-%date:~5,2%-%date:~8,2%

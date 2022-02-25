@@ -144,10 +144,10 @@ class SerialCan():
         self.serial_state = False           # 串口状态 True连接  False断开
         self.network = canopen.Network()
         self.add_recv_cb(listen_cb)         # 设置接收数据回调，调试用
-        self.err_cb = None
+        self._err_cb = None
+        self._sdo_cb = None
         self.open_err_desribe = ''          # 打开错误描述
         self.com_name = ''
-        self.speed = 0
         self._sdo_auto_list = []             # sdo自动刷新列表
 
     def __del__(self):
@@ -172,7 +172,6 @@ class SerialCan():
             # self.network.bus.flushInput()
             self.network.sync.stop()
             self.network.disconnect()
-            ser = serial.Serial(self.com_name, 115200) 
         except Exception as e:
             print(e)
 
@@ -180,9 +179,7 @@ class SerialCan():
 
     def open(self, com:str) -> bool:
         '''打开串口'''
-        # 打开异常检查线程
-        self.__check_thread_run()
-
+        
         self.open_err_desribe = ''
         try:
             cb = self.network.listeners[1] # 打开头1s不把数据抛出去，因为串口缓存里面有脏数据
@@ -194,6 +191,8 @@ class SerialCan():
             self.serial_state = True
             time.sleep(0.5)
             self.network.listeners[1] = cb
+            # 打开异常检查线程
+            self.__check_thread_run()
         except Exception as e:
             print(e)
             self.open_err_desribe = str(e)
@@ -221,45 +220,46 @@ class SerialCan():
             node.sdo.RESPONSE_TIMEOUT = SDO_TIMEOUT      # 设置SDO超时时间
             node.sdo.MAX_RETRIES = SDO_RETRY             # 重试次数
 
-            # node.tpdo.read()
-            # # Re-map TPDO[1]
-            # # node.tpdo[2].clear()
-            # # node.tpdo[2].add_variable(0x6001, 1)
-            # # # # node.tpdo[2].add_variable(0x6000, 2)
-            # # # # node.tpdo[2].add_variable(0x6000, 3)
-            # # # # node.tpdo[2].add_variable(0x6000, 5)
-            # # # node.tpdo[2].trans_type = 4
-            # # # node.tpdo[2].event_timer = 10
-            # # # node.tpdo[2].enabled = True
-            # # # # Save new PDO configuration to node
-            # # node.tpdo[2].save()
-
-            # # Transmit SYNC every 1000 ms
-            # self.network.sync.start(1)
-
-            # # Change state to operational (NMT start)
-            # node.nmt.state = 'OPERATIONAL'
-
-            # # Read a value from TPDO[1]
-            # node.tpdo[2].wait_for_reception()
-            # self.speed = node.tpdo[2]['mcu file upload parameters.upload_state'].raw
-
-            # node.rpdo.read()
-            # # node.rpdo[2]['mcu file upload parameters.upload_state'].raw = 0x80
-            # # node.rpdo[2].transmit()
-            # # node.rpdo[2]['mcu file upload parameters.upload reset'].raw = 0x0
-            # # node.rpdo[2]['mcu file upload parameters.proxy decryption'].raw = 0x1
-            # # node.rpdo[2]['mcu file upload parameters.data crc'].raw = 0x12345678
-            # node.rpdo[2].trans_type = 4
-            # # node.rpdo[2].start(0.1)
-            # # node.rpdo[2].transmit()
-            # node.rpdo[2].save()
-            
         except Exception as e:
             print(traceback.format_exc())
             # return False, str(traceback.format_exc())
             return False, str(e)
         return True, ''
+
+    def pdo_test(self):
+        node.tpdo.read()
+        # Re-map TPDO[1]
+        # node.tpdo[2].clear()
+        # node.tpdo[2].add_variable(0x6001, 1)
+        # # # node.tpdo[2].add_variable(0x6000, 2)
+        # # # node.tpdo[2].add_variable(0x6000, 3)
+        # # # node.tpdo[2].add_variable(0x6000, 5)
+        # # node.tpdo[2].trans_type = 4
+        # # node.tpdo[2].event_timer = 10
+        # # node.tpdo[2].enabled = True
+        # # # Save new PDO configuration to node
+        # node.tpdo[2].save()
+
+        # Transmit SYNC every 1000 ms
+        self.network.sync.start(1)
+
+        # Change state to operational (NMT start)
+        node.nmt.state = 'OPERATIONAL'
+
+        # Read a value from TPDO[1]
+        node.tpdo[2].wait_for_reception()
+        self.speed = node.tpdo[2]['mcu file upload parameters.upload_state'].raw
+
+        node.rpdo.read()
+        # node.rpdo[2]['mcu file upload parameters.upload_state'].raw = 0x80
+        # node.rpdo[2].transmit()
+        # node.rpdo[2]['mcu file upload parameters.upload reset'].raw = 0x0
+        # node.rpdo[2]['mcu file upload parameters.proxy decryption'].raw = 0x1
+        # node.rpdo[2]['mcu file upload parameters.data crc'].raw = 0x12345678
+        node.rpdo[2].trans_type = 4
+        # node.rpdo[2].start(0.1)
+        # node.rpdo[2].transmit()
+        node.rpdo[2].save()
 
     def remove_canopen_node(self, id: int) -> bool:
         '''删除一个节点'''
@@ -267,8 +267,8 @@ class SerialCan():
             del self.network.nodes[id]
         except Exception as e:
             print(traceback.format_exc())
-            if self.err_cb != None:
-                self.err_cb(str(e))
+            if self._err_cb != None:
+                self._err_cb(str(e))
 
             return False
         return True
@@ -281,9 +281,37 @@ class SerialCan():
     def read_sdo_by_idx(self, id:int, idx:int, subindx:int = -1) -> str:
         '''通过字典索引读取sdo数据'''
         # ！！！ 这里没有做异常捕获, 读取错误时会把异常抛出，需要外面做异常捕获
-        if (subindx < 0):
-            return self.network.nodes[id].sdo[idx].raw
-        return self.network.nodes[id].sdo[idx][subindx].raw
+        
+        ret = None
+        if subindx < 0:
+            ret = self.network.nodes[id].sdo[idx].raw
+        else:
+            ret = self.network.nodes[id].sdo[idx][subindx].raw
+    
+        if type(ret) == type(b''):
+            return ''.join(['%02x ' % b for b in ret])
+        return str(ret)
+
+    def write_sdo_by_idx(self, data, id:int, idx:int, subindx:int = -1):
+        '''
+        写字典索引的值
+        data: 可能int 可能bytes
+        '''
+        if subindx < 0:
+            if type(data) == type(b''):
+                with self.network.nodes[id].sdo[idx].open('wb', size=len(data), block_transfer=True) as fp:
+                    fp.write(data)
+            else:
+                self.network.nodes[id].sdo[idx].raw = data
+        else:
+            if type(data) == type(b''):
+                print('='*30)
+                print(data)
+                with self.network.nodes[id].sdo[idx][subindx].open('wb', size=len(data), block_transfer=True) as fp:
+                    fp.write(data)
+                print('*'*30)
+            else:
+                self.network.nodes[id].sdo[idx][subindx].raw = data
 
     def open_auto_read_sdo_by_id(self, id:int) -> Tuple[bool, str]:
         '''打开指定canid的自动读取sdo数据'''
@@ -299,26 +327,47 @@ class SerialCan():
 
         def sdo_auto_read_run():
             while True:
-                print('start read test')
+                print('start read sdo')
 
                 for sdo_id in self._sdo_auto_list:
                     print(sdo_id)
+                    map = {}
                     try:
-                        for obj in self.network.nodes[sdo_id].object_dictionary.values():
-                            print('0x%X: %s' % (obj.index, obj.name))
-                            self.read_sdo_by_idx(sdo_id, obj.index)
+                        for obj in self.network.nodes[sdo_id].object_dictionary.values():                         
+                            if obj.index < 0x100:
+                                continue
 
-                            if isinstance(obj, canopen.objectdictionary.Record):
-                                for subobj in obj.values():
-                                    print('  %d: %s' % (subobj.subindex, subobj.name))
-                                    self.read_sdo_by_idx(sdo_id, obj.index, subobj.subindex)
+                            if isinstance(obj, canopen.objectdictionary.Variable):
+                                try:
+                                    read = self.read_sdo_by_idx(sdo_id, obj.index)
+                                    # print('0x%X: %s : %s' % (obj.index, obj.name, read))
+                                    # type(obj.index)
+                                    # type(read)
+                                    map[('%x' % (obj.index)).upper()] = read
+                                except Exception as e:
+                                    print(f'warning: %x {obj.name, e}' % (obj.index))
+
+                            if not isinstance(obj, canopen.objectdictionary.Variable):
+                                map[('%x' % (obj.index)).upper()] = {}
+                                for subobj in obj.values():  
+                                    try:                             
+                                        read = self.read_sdo_by_idx(sdo_id, obj.index, subobj.subindex)
+                                        # print('  %d: %s : %s' % (subobj.subindex, subobj.name, read)) 
+                                        map[('%x' % (obj.index)).upper()][str(subobj.subindex).upper()] = read
+                                    except Exception as e:
+                                        print(f'warning: %x {subobj.name, e}' % (subobj.subindex))
                         
                     except Exception as e:
-                        print(e)
+                        print(f'warning [sdo_auto_read_run]: {e}')
                         continue
 
+                    print('-'*30+'map:')
+                    print(map)
+                    if self._sdo_cb:
+                        self._sdo_cb(sdo_id, map)
+
                 print('*'*30)
-                time.sleep(1)
+                time.sleep(5)
             
         self._read_sdo_thread = thread_run(sdo_auto_read_run)
         return True, ''
@@ -490,7 +539,7 @@ class SerialCan():
             设置异常出错回调
             cb(str)
         '''
-        self.err_cb = cb
+        self._err_cb = cb
 
     def add_recv_cb(self, cb):
         '''添加数据接收回调'''
@@ -510,6 +559,10 @@ class SerialCan():
         global can_send_cb
         can_send_cb = cb
 
+    def set_auto_sdo_recv_cb(self, cb):
+        '''设置自动sdo接收回调'''
+        self._sdo_cb = cb
+
     def get_connect_state(self) -> bool:
         '''获取连接状态'''
         return self.serial_state
@@ -518,15 +571,14 @@ class SerialCan():
         '''检查串口运行异常, 并终止串口'''
         while True:
             time.sleep(1)
-            # print(f'speed: {self.speed}')
 
             if self.serial_state:
                 try:
                     self.network.check()
                 except Exception as e:
                     print(traceback.format_exc())
-                    if self.err_cb != None:
-                        self.err_cb(str(e))
+                    if self._err_cb != None:
+                        self._err_cb(str(e))
                     self.serial_state = False
                     try:
                         self.network.disconnect() # 尝试断开
@@ -567,6 +619,7 @@ if __name__ == '__main__':
 
         for obj in node.object_dictionary.values():
             print('0x%X: %s' % (obj.index, obj.name))
+            # print(type(obj))
             if isinstance(obj, canopen.objectdictionary.Record):
                 for subobj in obj.values():
                     print('  %d: %s' % (subobj.subindex, subobj.name))
@@ -580,14 +633,19 @@ if __name__ == '__main__':
         # print(dir(node.object_dictionary))
         # print(node.object_dictionary.names)
         # print(node.object_dictionary.update)
-        exit(0)
+        # exit(0)
+
+        node.sdo.RESPONSE_TIMEOUT = SDO_TIMEOUT      # 设置SDO超时时间
+        node.sdo.MAX_RETRIES = SDO_RETRY             # 重试次数
+
         print('-'*30)
         tick = 30
         while tick > 0:
             network.check()
-            print(node == network.nodes[6])
+            # print(node == network.nodes[6])
             # print(node.sdo[0x60C4][4].raw)
             # print(node.sdo[0x60E0].raw)
+            print(node.sdo[0x6001][7].raw)
             time.sleep(1)
 
         network.sync.stop()

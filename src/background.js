@@ -1,11 +1,12 @@
 'use strict'
 
-import { app, protocol, BrowserWindow } from 'electron'
+import { app, protocol, BrowserWindow, Menu, globalShortcut } from 'electron'
 import { createProtocol } from 'vue-cli-plugin-electron-builder/lib'
 import { startServerUp, stopSever, sendMsg2Server } from './main/modules/clientConnect'
 import { tcpRecvProcess } from './main/modules/clientRecvProcess'
 import initIpcEvent from './main/modules/ipcEvent'
 import { Window } from './main/modules/window'
+import { memus } from './main/modules/memu'
 const cmd = require('./main/modules/cmd')
 const isDevelopment = process.env.NODE_ENV !== 'production'
 
@@ -37,6 +38,19 @@ async function createWindow () {
   // window.createTray() // 托盘
   global.win = window.main
   global.window = window
+
+  // ------------- 重构菜单栏 ----------------
+  const mainMenu = Menu.buildFromTemplate(memus)
+  Menu.setApplicationMenu(mainMenu)
+  // -----------------------------------------
+  // --------------- 监听全局按键事件 -------------------
+  globalShortcut.register('CommandOrControl+R', () => {
+    window.main.reload()
+  })
+  globalShortcut.register('CommandOrControl+Q', () => {
+    app.exit()
+  })
+  // -------------------------------------------------
 
   if (process.env.WEBPACK_DEV_SERVER_URL) {
     // Load the url of the dev server if in development mode

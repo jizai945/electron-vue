@@ -1,0 +1,18 @@
+{
+	"version_line": [{
+			"time": "2022/2/24",
+			"version": "0.0.2",
+			"change": "新增了eds转c, mcu文件打包, sdo, 升级功能"
+		},
+        {
+			"time": "2022/1/28",
+			"version": "0.0.1",
+			"change": "完成canopen移植"
+		},
+		{
+			"time": "2021/12/24",
+			"version": "0.0.0",
+			"change": "新建工程"
+		}
+	]
+}

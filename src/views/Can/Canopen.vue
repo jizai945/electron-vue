@@ -19,7 +19,8 @@
         </el-dialog>
       </div>
 
-    <el-card class="box-card">
+    <!-- 暂时不用 -->
+    <!-- <el-card class="box-card">
       <div slot="header" class="clearfix">
         <span style="color:#666699; margin-left: 20px">canopen节点详细信息</span>
         <el-button size="small" style="float: right; margin-bottom:10px" :class="zoom(desShow)" @click="desShow=!desShow"></el-button>
@@ -39,7 +40,36 @@
           </el-table>
         </el-col>
       </div>
-    </el-card>
+    </el-card> -->
+
+    <!-- dialog -->
+    <el-dialog title="节点数据修改" :visible.sync="dialogCanopenSdoVisible" :close-on-click-modal="false" style="min-width:1300px">
+
+      <el-row style="margin-top:10px;">
+        <el-col :span="3"><div style="text-align:right">index: </div></el-col>
+        <el-col :span="8" :offset="1"><div><el-input v-model="dialogSdoCurrentIndex" clearable></el-input></div></el-col>
+        <el-col :span="3"><div style=" text-align:right">subIndex:</div></el-col>
+        <el-col :span="8" :offset="1"><div><el-input v-model="dialogSdoCurrentSubIndex" clearable></el-input></div></el-col>
+      </el-row>
+      <el-row style="margin-top:30px;">
+        <el-col :span="3"><div style="text-align:right">数据: </div></el-col>
+        <el-col :span="8" :offset="1">
+          <el-select  v-model="dialogSdoTypeSelect" placeholder="请选择" style="width:100%">
+            <el-option
+              v-for="item in dialogSdoUpType"
+              :key="item.value"
+              :label="item.value"
+              :value="item.value">
+            </el-option>
+          </el-select>
+        </el-col>
+        <el-col :span="11" :offset="1"><div><el-input v-model="dialogSdoData" clearable></el-input></div></el-col>
+      </el-row>
+      <div slot="footer" class="dialog-footer">
+        <el-button @click="dialogCanopenSdoVisible = false">取 消</el-button>
+        <el-button type="primary" @click="dialogCanopenSdoSure">确 定</el-button>
+      </div>
+    </el-dialog>
 
     <el-card class="box-card" >
       <div slot="header" class="clearfix">
@@ -55,6 +85,7 @@
               @update:show="(show) => contextMenuVisible = show">
             <a href="javascript:;" @click="rightMenuAddNode">添加节点</a>
             <a href="javascript:;" @click="rightMenuDelNode(rightNodeCache)">删除节点</a>
+            <a href="javascript:;" @click="rightMenuNodeUpgrade(rightNodeCache)">节点升级</a>
           </context-menu>
           <context-menu class="blank-right-menu"
               :target="contextMenuTargetBlank"
@@ -85,13 +116,13 @@
                       :active-value="true"
                       :inactive-value="false"
                       active-text="开"
-                      inactive-text="自动更新:关">
+                      inactive-text="自动刷新(5s):关">
                     </el-switch>
                     <el-table ref="canTable" class="tableBox" max-height="600" :data="item.table" :border="true">
                       <el-table-column prop="Index" label="索引" width="100"></el-table-column>
                       <el-table-column prop="SubIndex" label="子索引" width="100"></el-table-column>
                       <el-table-column prop="ParameterName" label="名称"></el-table-column>
-                      <el-table-column prop="Data" label="数据" width="100"> </el-table-column>
+                      <el-table-column show-overflow-tooltip prop="Data" label="数据" width="100"> </el-table-column>
                       <el-table-column prop="DataType" label="数据类型" width="80"></el-table-column>
                       <el-table-column prop="ObjectType" label="对象类型" width="80"></el-table-column>
                       <el-table-column prop="AccessType" label="属性"> </el-table-column>
@@ -105,7 +136,8 @@
                             </div>
                             <el-button @click="rowEdsDataDttails(scope.row)" type="text" size="small" style="color: #8B658B;">详情</el-button>
                           </el-tooltip>
-                          <el-button @click="rowEdsDataUpdata(scope.row)" type="text" size="small">更新</el-button>
+                          <el-button @click="rowEdsDataUpdata(scope.row)" type="text" size="small">刷新</el-button>
+                          <el-button @click="rowEdsDataChange(scope.row)" type="text" size="small" style="color: red;">修改</el-button>
                         </template>
                       </el-table-column>
                     </el-table>
@@ -186,6 +218,9 @@ export default {
     return {
       iconClass: 'el-icon-s-flag',
       dialogCanopenNodeVisible: false,
+      dialogCanopenSdoVisible: false,
+      dialogSdoCurrentIndex: '1001',
+      dialogSdoCurrentSubIndex: '',
       idsDataVisible: false,
       inputCanID: '',
       inputEdsFile: '',
@@ -225,7 +260,13 @@ export default {
         0x0B: 'UNICODE_STRING',
         0x0C: 'UNICODE_STRING',
         0x0D: 'TIME_DIFFERENCE'
-      }
+      },
+      dialogSdoTypeSelect: 'int',
+      dialogSdoUpType: [
+        { value: 'hex' },
+        { value: 'int' }
+      ],
+      dialogSdoData: ''
     }
   },
   methods: {
@@ -253,7 +294,6 @@ export default {
     btnChoiceEds () {
       dialog.showOpenDialog({
         title: '请选择你的文件',
-        defaultPath: '%userprofile%/Desktop', // 默认打开的文件路径选择
         filters: [{ // 过滤掉你不需要的文件格式
           name: 'eds',
           extensions: ['eds']
@@ -555,7 +595,7 @@ export default {
         this.editableTabs = tabs.filter(tab => tab.name !== targetName) // 删除
       }
     },
-    // 自动更新改变
+    // 自动刷新改变
     updateChange (state, name) {
       // console.log(this.allTableCache)
       var id = parseInt(name)
@@ -570,7 +610,7 @@ export default {
         state: state ? 'open' : 'close'
       })
     },
-    // 更新
+    // 刷新
     rowEdsDataUpdata (row) {
       const canID = this.allTableCache.currentId
       const index = row.Index
@@ -587,6 +627,25 @@ export default {
         // console.log(key, ':', row[key])
       }
       this.idsDataVisible = true
+    },
+    // 修改
+    rowEdsDataChange (row) {
+      this.dialogSdoCurrentIndex = row.Index
+      this.dialogSdoCurrentSubIndex = row.SubIndex
+      this.dialogSdoData = row.Data
+      this.dialogCanopenSdoVisible = true
+    },
+    // 确定
+    dialogCanopenSdoSure () {
+      ipcRenderer.send('canopen2main', {
+        msg: 'canopen sdo data change',
+        id: this.allTableCache.currentId,
+        idx: this.dialogSdoCurrentIndex,
+        subIdx: this.dialogSdoCurrentSubIndex,
+        data: this.dialogSdoData,
+        type: this.dialogSdoTypeSelect
+      })
+      this.dialogCanopenSdoVisible = false
     },
     // 详情悬浮
     dttailsTollTipShow (row) {
@@ -619,7 +678,7 @@ export default {
     },
     // 标签tabs切换
     leaveTab (activeName, oldActiveName) {
-      console.log(activeName, oldActiveName)
+      // console.log(activeName, oldActiveName)
       this.allTableCache[this.allTableCache.currentId].currentTab = activeName
     },
     // 缩放图标切换
@@ -650,6 +709,26 @@ export default {
       console.log('删除节点:' + nodeCache.data.id)
       this.deleteAllById(nodeCache.data.id)
     },
+    // 右键菜单中的节点升级
+    rightMenuNodeUpgrade (nodeCache) {
+      this.contextMenuVisible = false
+      console.log('升级节点:' + nodeCache.data.id)
+      dialog.showOpenDialog({
+        title: '选择升级文件',
+        filters: [{ // 过滤掉你不需要的文件格式
+          name: 'bin',
+          extensions: ['bin']
+        }]
+      }).then(res => {
+        // console.log(res)
+        if (res.canceled === false && res.filePaths[0] !== '') {
+          ipcRenderer.send('canopen2main', { msg: 'canopen upload start', id: nodeCache.data.id, file: res.filePaths[0] })
+          this.$message('节点' + nodeCache.data.id + '开始升级....')
+        }
+      }).catch(req => {
+        console.log(req)
+      })
+    },
     iRowStyle: function ({ row, rowIndex }) {
       return 'height:35px'
     },
@@ -667,8 +746,8 @@ export default {
   },
   mounted () {
     // -------------------------------- for test -------------------------------------------
-    this.testAddEdsFile('0x06', 'C:\\Users\\Wang\\Desktop\\e35-pudu.eds')
-    // this.testAddEdsFile('0x07', 'C:\\Users\\Wang\\Desktop\\demo.eds')
+    // this.testAddEdsFile('0x06', 'C:\\Users\\Wang\\Desktop\\e35-pudu.eds')
+    // this.testAddEdsFile('0x02', 'C:\\Users\\Wang\\Desktop\\demo.eds')
     // window.setInterval(() => {
     //   for (var i = 0; i < this.editableTabs.length; i++) {
     //     console.log(this.editableTabs[0].pageForm.currentPage)
@@ -725,6 +804,28 @@ export default {
               showClose: true,
               message: '<i>读取sdo, id:' + arg.id + ' idx: ' + arg.idx + ' subIdx: ' + arg.subIdx + '失败</i>' + '<br><i>' + arg.describe + '</i>'
             })
+          } else {
+            // console.log(arg)
+            // console.log(this.allTableCache)
+            try {
+              for (let i = 0; i < this.allTableCache[arg.id].tabs[0].table.length; i++) {
+                if (arg.idx === this.allTableCache[arg.id].tabs[0].table[i].Index &&
+                      arg.subIdx === this.allTableCache[arg.id].tabs[0].table[i].SubIndex) {
+                  this.allTableCache[arg.id].tabs[0].table[i].Data = arg.data
+
+                  this.$message({
+                    dangerouslyUseHTMLString: true,
+                    type: 'success',
+                    duration: 3000,
+                    showClose: true,
+                    message: '<i>读取sdo, id:' + arg.id + ' idx: ' + arg.idx + ' subIdx: ' + arg.subIdx + '成功: </i>' + '<br><i>' + arg.data + '</i>'
+                  })
+                  break
+                }
+              }
+            } catch (error) {
+              console.log(error)
+            }
           }
           break
         // 切换自动sdo状态
@@ -736,11 +837,69 @@ export default {
             position: 'bottom-left'
           })
           // 如果失败，把状态改变回来
-          console.log(this.allTableCache)
           if (this.allTableCache[arg.id] && !arg.result) {
             this.allTableCache[arg.id].tabs[0].switch = (arg.state !== 'open')
           }
-          console.log(this.allTableCache)
+          // console.log(this.allTableCache)
+          break
+          // 自动读取sdo数据更新
+        case 'canopen auto sdo recv res':
+          try {
+            let idx, subIdx
+            for (let i = 0; i < this.allTableCache[arg.id].tabs[0].table.length; i++) {
+              // 判断是否是子项
+              idx = this.allTableCache[arg.id].tabs[0].table[i].Index
+              subIdx = this.allTableCache[arg.id].tabs[0].table[i].SubIndex
+              // console.log(idx, subIdx)
+              if (subIdx === '') {
+                // 数据类型为空代表是父索引
+                // if (this.allTableCache[arg.id].tabs[0].table[i].DataType !== '') {
+                if (typeof (arg.sdo[idx]) === 'string') {
+                  this.allTableCache[arg.id].tabs[0].table[i].Data = arg.sdo[idx]
+                }
+              } else {
+                if (arg.sdo[idx] && arg.sdo[idx][subIdx]) {
+                  this.allTableCache[arg.id].tabs[0].table[i].Data = arg.sdo[idx][subIdx]
+                }
+              }
+            }
+          } catch (error) {
+            console.log(error)
+          }
+          // console.log(arg)
+          break
+        // 修改sdo结果反馈
+        case 'canopen sdo data change res':
+          if (arg.result === true) {
+            this.$message({
+              dangerouslyUseHTMLString: true,
+              type: 'success',
+              duration: 3000,
+              showClose: true,
+              message: '<i>修改sdo, id:' + arg.id + ' idx: ' + arg.idx + ' subIdx: ' + arg.subIdx + '成功</i>'
+            })
+          } else {
+            this.$message({
+              dangerouslyUseHTMLString: true,
+              type: 'error',
+              duration: 3000,
+              showClose: true,
+              message: '<i>修改sdo, id:' + arg.id + ' idx: ' + arg.idx + ' subIdx: ' + arg.subIdx + '失败</i>' + '<br><i>' + arg.describe + '</i>'
+            })
+          }
+          break
+        // 升级结果反馈
+        case 'canopen upload start res':
+          this.$notify({
+            title: arg.id + ' 节点 升级结果',
+            message: arg.result === true ? '升级成功' : '升级失败: ' + arg.describe,
+            type: arg.result === true ? 'success' : 'error',
+            position: arg.result === true ? 'bottom-left' : 'top-right',
+            duration: arg.result === true ? 3000 : 0
+          })
+
+          break
+        default:
           break
       }
     })

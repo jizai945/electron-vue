@@ -52,30 +52,30 @@ function tcpRecvSubProcess (recvJson) {
       case 'canopen add node res': // canopen添加节点
         global.win.webContents.send('main2can', recvJson)
         break
-      case 'canopen upload start res': // 升级结果
-        // 查找一下 map中对应canid的子窗口是否存在
-        var id = recvJson.id
-        if (!canopenWinMap.has(id)) {
-          if (findCanoIDWind(id) === false) break // 窗口查找失败，建立map映射失败
-        }
+        // case 'canopen upload start res': // 升级结果
+        //   // 查找一下 map中对应canid的子窗口是否存在
+        //   var id = recvJson.id
+        //   if (!canopenWinMap.has(id)) {
+        //     if (findCanoIDWind(id) === false) break // 窗口查找失败，建立map映射失败
+        //   }
 
-        try {
-          canopenWinMap.get(id).webContents.send('main2canopenSub', recvJson)
-        } catch (err) {
-          if (err.message === 'Object has been destroyed') {
-            // 删除原来map
-            canopenWinMap.delete(id)
-            // 重新查找窗口
-            findCanoIDWind(id)
-          }
-          try {
-            canopenWinMap.get(id).webContents.send('main2canopenSub', recvJson)
-          } catch (err) {
-            console.log(err)
-          }
-        }
+        //   try {
+        //     canopenWinMap.get(id).webContents.send('main2canopenSub', recvJson)
+        //   } catch (err) {
+        //     if (err.message === 'Object has been destroyed') {
+        //       // 删除原来map
+        //       canopenWinMap.delete(id)
+        //       // 重新查找窗口
+        //       findCanoIDWind(id)
+        //     }
+        //     try {
+        //       canopenWinMap.get(id).webContents.send('main2canopenSub', recvJson)
+        //     } catch (err) {
+        //       console.log(err)
+        //     }
+        //   }
 
-        break
+        // break
       default:
         global.win.webContents.send('main2can', recvJson)
         break
@@ -85,7 +85,7 @@ function tcpRecvSubProcess (recvJson) {
 
 function tcpRecvProcess (recv) {
   // 太长不显示
-  if (recv.length < 256) {
+  if (recv.length < 128) {
     console.log('[client]:py -> js: ' + recv)
   } else {
     console.log('[client]:py -> js, length: ' + recv.length)
