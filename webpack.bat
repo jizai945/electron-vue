@@ -11,14 +11,22 @@ set version=%%i
 set version=v%version:~1,-1%
 echo %version%
 echo name:pudu-can-tool-%version%-%date:~0,4%-%date:~5,2%-%date:~8,2%
+@REM 删除同名文件夹
 CMD.EXE /C call del /s /Q dist_electron\pudu-can-tool-%version%-%date:~0,4%-%date:~5,2%-%date:~8,2%
 CMD.EXE /C call rd /s /q dist_electron\pudu-can-tool-%version%-%date:~0,4%-%date:~5,2%-%date:~8,2%
+
+@REM python脚本生成exe----------------------------------
 cd .\backend\
 CMD.EXE /C call pyinstaller -Fw backend_up.py
 CMD.EXE /C call python installer.py
 cd ..
+@REM ----------------------------------------------------
+
 CMD.EXE /C call yarn run electron:build
 CMD.EXE /C call md dist_electron\win-ia32-unpacked\backend\dist
-CMD.EXE /C call copy backend\dist\ dist_electron\win-ia32-unpacked\backend\dist\
-CMD.EXE /C call copy .\update.json dist_electron\win-ia32-unpacked\
+
+@REM ------------------------------------------拷贝文件放在vue cli中
+@REM CMD.EXE /C call xcopy backend\dist\ dist_electron\win-ia32-unpacked\backend\dist\ /s
+@REM CMD.EXE /C call copy .\update.json dist_electron\win-ia32-unpacked\
+@REM ----------------------------------------------------
 CMD.EXE /C call ren dist_electron\win-ia32-unpacked pudu-can-tool-%version%-%date:~0,4%-%date:~5,2%-%date:~8,2%

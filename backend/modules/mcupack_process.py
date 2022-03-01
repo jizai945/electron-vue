@@ -1,11 +1,13 @@
 import json
 import os, sys
+import toml
 try:
     from modules.crc32 import *
 except:
     from crc32 import *
 
 file_name_list = ['runtime', 'bsp', 'user', 'upgrade'] # 子文件名字列表
+partion_table_list = ['parameters', 'bsp', 'runtime', 'user', 'parameters_bk'] # 分区表列表
 HEAD = 'PUDUMCUFILE'
 file_info_json_len = 2*1024     # 文件描述信息json字符串长度  这里的长度是在文件中的最大长度，不是字符串实际有效长度
 file_attach_str = ''
@@ -90,26 +92,30 @@ def generate_attach_json(cfg:dict) -> str:
     attach['img_cnt'] = len(file_name_list)
     attach['partion_table'] = dict()
 
-    for idx, fi in enumerate(file_name_list):
+    for idx, fi in enumerate(partion_table_list): # 完善分区表信息
         attach['partion_table'][fi] = dict()
         attach['partion_table'][fi]['label'] = fi
-        attach['partion_table'][fi]['is_bootable'] = True
-        attach['partion_table'][fi]['start_addr'] = int(cfg['data'][f'{fi}Start'], 16)
-        next_addr = 0x08080000 if idx == (len(file_name_list)-1) else int(cfg['data'][f'{file_name_list[idx+1]}Start'], 16)
-        attach['partion_table'][fi]['size'] = next_addr - int(cfg['data'][f'{fi}Start'], 16)
+        attach['partion_table'][fi]['is_bootable'] = cfg['data'][f'{fi}PartBoot']
+        # 判断起始地址数据类型是字符串还是数字
+        if type(cfg['data'][f'{fi}PartStart']) == type(''):
+            attach['partion_table'][fi]['start_addr'] = int(cfg['data'][f'{fi}PartStart'], 16)
+        else:
+            attach['partion_table'][fi]['start_addr'] = cfg['data'][f'{fi}PartStart']
+        attach['partion_table'][fi]['size'] = cfg['data'][f'{fi}PartSize']
 
     if cfg['data']['depFlag'] == True:
         attach['deps'] = dict()
         attach['deps']['mcu_model'] = cfg['data']['deps']['mcu_model']
-        attach['deps']['hver'] = list()
-        for hv in cfg['data']['deps']['hver']:
-            attach['deps']['hver'].append(hv['value'])
+        if len(cfg['data']['deps']['hver']) > 0:
+            attach['deps']['hver'] = list()
+            for hv in cfg['data']['deps']['hver']:
+                attach['deps']['hver'].append(hv['value'])
         attach['deps']['prj'] = cfg['data']['deps']['prj']
         attach['deps']['btype'] = cfg['data']['deps']['btype']
         attach['deps']['func'] = cfg['data']['deps']['func']
 
+    attach['img_list'] = list()
     for fi in file_name_list:
-        attach['img_list'] = list()
         attach['img_list'].append({})
         attach['img_list'][-1]['partion_label'] = fi
         attach['img_list'][-1]['version'] = cfg['data'][f'{fi}Version']
@@ -137,9 +143,21 @@ def generate_attach_json(cfg:dict) -> str:
 
     return json_str
 
+def read_toml_cfg() -> dict:
+    '''解析toml配置'''
+
+    try:
+        read = toml.load('./example/soc_config.toml')
+    except:
+        read = toml.load('./backend/dist/example/soc_config.toml')
+    print(read)
+    return read
+
 def start_pack(cfg:dict) -> bool:
     '''开始打包'''
     global file_attach_str
+
+    print(cfg)
 
     file_log_str = cfg['data']['log']
     file_attach_str = generate_attach_json(cfg)

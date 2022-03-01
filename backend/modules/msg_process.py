@@ -6,7 +6,7 @@ import modules.serial_canopen as serial_can
 from modules.sub_thread import *
 from . import ulog
 from .serial_canopen import SerialCan
-from modules.mcupack_process import start_pack
+from modules.mcupack_process import start_pack, read_toml_cfg
 from modules.eds2c import EdsToC
 
 serial_obj = None
@@ -313,6 +313,23 @@ def msg_canopen_sdo_change(send_fd: object, recv: dict):
 
     thread_run(read_sdo_func, id=id, idx=idx, subIdx=subIdx, data=data, type=type)
 
+def msg_read_pack_toml_cfg(send_fd: object, recv: dict):
+    '''读取分区表配置'''
+    send = {'msg':'read pack toml cfg res', 
+                'result':True,
+                'data': {},
+                'describe': ''}
+    try:
+        ret = read_toml_cfg()
+        send['data'] = ret
+    except Exception as e:
+        send['result'] = False
+        send['describe'] = str(e)
+    
+    tcp_send(send_fd, json.dumps(send))
+    ulog.debug(f'[server]: py -> js: {send}')
+
+
 def msg_pack_mcu_file(send_fd: object, recv: dict):
     '''打包'''
     send = {'msg':'pack res', 
@@ -358,6 +375,7 @@ js2pyMsgCb = {
     'canopen read sdo': msg_canopen_read_sdo,           # 通过sdo读取数据
     'canopen auto sdo': msg_canopen_auto_sdo,           # 自动读取sdo 打开/关闭
     'canopen sdo data change': msg_canopen_sdo_change,  # 通过sdo修改数据
+    'read pack toml cfg':msg_read_pack_toml_cfg,        # 读取分区表配置
     'start pack': msg_pack_mcu_file,                    # 打包mcu文件
     'eds convert': msg_eds_convert,                     # eds 转换消息
 }

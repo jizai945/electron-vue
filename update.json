@@ -1,5 +1,11 @@
 {
-	"version_line": [{
+	"version_line": [
+		{
+			"time": "2022/2/28",
+			"version": "0.0.3",
+			"change": "增加了对toml文件解析, eds转runtime和bsp做根据toml配置中索引做区分处理, 修改了固件打包中分区表配置"
+		},
+		{
 			"time": "2022/2/24",
 			"version": "0.0.2",
 			"change": "新增了eds转c, mcu文件打包, sdo, 升级功能"

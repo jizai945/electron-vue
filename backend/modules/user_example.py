@@ -5,13 +5,13 @@ user_txt = '''
 
 
 
-#define OD_PARAM_INIT  { \
-    /*OD_PARAM_INIT*/
+#define OD_PARAM_INIT  {
+	/*OD_PARAM_INIT*/
 }
 
 typedef struct 
 {
-  /*typedef struct*/
+	/*typedef struct*/
 }od_t;
 
 static const od_t od_default_data = OD_PARAM_INIT;
@@ -25,30 +25,30 @@ static od_t od;
 /**************************************************************************/
 static const indextable SlaveApp_objdict[] = 
 {
-    /*indextable*/
+	/*indextable*/
 };
 
 const static indextable * SlaveApp_scanIndexExternOD (uint16_t wIndex, uint32_t * errorCode, ODCallback_t **callbacks)
 {
-    	int i;
+	int i;
 	*callbacks = NULL;
 	switch(wIndex){
 /*scan index od*/
-        default:
+		default:
 			*errorCode = OD_NO_SUCH_OBJECT;
 			return NULL;
-    }
-    *errorCode = OD_SUCCESSFUL;
-    return &SlaveApp_objdict[i];
+	}
+	*errorCode = OD_SUCCESSFUL;
+	return &SlaveApp_objdict[i];
 }
 
 
 
 static quick_index  firstExternIndex = {
-  /*quick first*/
+	/*quick first*/
 };
 static quick_index  lastExternIndex = {
-  /*quick last*/
+	/*quick last*/
 };
 
 //  const static uint16_t SlaveApp_ObjdictSize = sizeof(SlaveApp_objdict)/sizeof(SlaveApp_objdict[0]);
@@ -61,9 +61,9 @@ static quick_index  lastExternIndex = {
  */
 static indextable * sendObjectInfo(uint16_t * len)
 {
-  *len = sizeof(SlaveApp_objdict)/sizeof(indextable);
+	*len = sizeof(SlaveApp_objdict)/sizeof(indextable);
 
-  return &SlaveApp_objdict[0];
+	return &SlaveApp_objdict[0];
 }
 
 /**
@@ -72,14 +72,15 @@ static indextable * sendObjectInfo(uint16_t * len)
  */
 static void ObjDictRestoreuserDefaultParam(void)
 {
-  RT_CALL(libc.memcpy)(&od,&od_default_data,sizeof(od));
+	RT_CALL(libc.memcpy)(&od,&od_default_data,sizeof(od));
 }
 
 
 void enableExternOD(void)
 {
-    RT_CALL(canopen.dict.set_op_method)(SlaveApp_scanIndexExternOD,sendObjectInfo,ObjDictRestoreuserDefaultParam,firstExternIndex,lastExternIndex);
+	RT_CALL(canopen.dict.set_op_method)(SlaveApp_scanIndexExternOD,sendObjectInfo,ObjDictRestoreuserDefaultParam,firstExternIndex,lastExternIndex);
 }
+
 
 
 

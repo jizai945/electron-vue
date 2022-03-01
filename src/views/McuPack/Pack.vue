@@ -14,9 +14,9 @@
                         <el-input v-model="dataForm.fileName"></el-input>
                     </el-col>
                 </el-form-item>
-                <span>子文件配置</span>
+                <span>烧录文件</span>
                     <el-divider></el-divider>
-                <div v-for="(name, index) in partionName" :key="index">
+                <div v-for="(name, index) in firmwareName" :key="`${index}Firmware`">
                   <el-form-item :label="name" :prop="name" :rules="rules[`${name}`]">
                     <el-col :span="18">
                       <el-input v-model="dataForm[`${name}`]" :disabled=true></el-input>
@@ -25,18 +25,13 @@
                       <el-button type="primary" @click.prevent="fileChoiceClick(name)">选择文件</el-button>
                     </el-col>
                   </el-form-item>
-                  <el-form-item :label='`${name}起始地址`' :prop="`${name}Start`" :rules="rules[`${name}Start`]">
-                    <el-col :span="18">
-                        <el-input v-model="dataForm[`${name}Start`]"></el-input>
-                    </el-col>
-                  </el-form-item>
+
                   <el-form-item :label='`${name}版本`' :prop="`${name}Version`" :rules="rules[`${name}Version`]">
                     <el-col :span="18">
                         <el-input v-model="dataForm[`${name}Version`]"></el-input>
                     </el-col>
                   </el-form-item>
                   <el-divider content-position="left"><i class="el-icon-finished"></i></el-divider>
-
                 </div>
                 <span>选填项</span>
                     <el-divider></el-divider>
@@ -93,9 +88,32 @@
                         <el-input v-model="dataForm.deps.func"></el-input>
                     </el-col>
                 </el-form-item>
+                <span>分区表信息(不可修改)</span>
+                  <el-switch v-model="dataForm.partionVisible" active-text="显示" inactive-text="隐藏" style="margin-left:20px"></el-switch>
+                  <el-divider></el-divider>
+                <div v-for="(name, index) in partion_table" :key="`${index}Partion`">
+                  <el-form-item :label='`${name} 起始地址`' :prop="`${name}PartStart`" :rules="rules[`${name}PartStart`]" v-show="dataForm.partionVisible">
+                    <el-col :span="18">
+                        <el-input v-model="dataForm[`${name}PartStart`]" :disabled=true></el-input>
+                    </el-col>
+                  </el-form-item>
+                  <el-form-item label='分区大小' :prop="`${name}PartSize`" :rules="rules[`${name}PartSize`]" v-show="dataForm.partionVisible">
+                    <el-col :span="18">
+                        <el-input v-model="dataForm[`${name}PartSize`]" :disabled=true></el-input>
+                    </el-col>
+                  </el-form-item>
+                  <el-form-item label='是否boot' :prop="`${name}PartBoot`" v-show="dataForm.partionVisible">
+                    <el-col :span="18">
+                        <el-switch v-model="dataForm[`${name}PartBoot`]" disabled></el-switch>
+                    </el-col>
+                  </el-form-item>
+                  <div  v-show="dataForm.partionVisible">
+                    <el-divider content-position="left"><i class="el-icon-finished"></i></el-divider>
+                  </div>
+                </div>
                 <el-form-item>
-                    <el-button type="primary" @click="startPack('dataForm')">打包</el-button>
-                    <el-button @click="resetPack('dataForm')">重置</el-button>
+                  <el-button type="primary" @click="startPack('dataForm')">打包</el-button>
+                  <el-button @click="resetPack('dataForm')">重置</el-button>
                 </el-form-item>
             </el-form>
         </el-card>
@@ -110,8 +128,10 @@ export default {
     return {
       cachePath: './tmp',
       cacheFile: 'pack.json',
-      partionName: ['runtime', 'bsp', 'user', 'upgrade'],
+      firmwareName: ['runtime', 'bsp', 'user', 'upgrade'], // 固件名列表
+      partion_table: ['parameters', 'bsp', 'runtime', 'user', 'parameters_bk'], // 分区表名称
       dataForm: {
+        partionVisible: false, // 是否展示分区表信息
         protocolVersion: '0.1.0', // 格式版本
         version: '0.0.1', // 版本号
         fileName: '/firmware/user', // 文件名
@@ -125,34 +145,55 @@ export default {
           func: 'MOTOR_DRIVER'
         },
         log: '', // 日志信息
+        /* ------------ 固件信息----------- */
         runtime: '',
-        runtimeStart: '0x08000000',
         runtimeVersion: '0.1.0',
         bsp: '',
-        bspStart: '0x08010000',
         bspVersion: '0.1.0',
         user: '',
-        userStart: '0x08020000',
         userVersion: '0.1.0',
         upgrade: '',
-        upgradeStart: '0x08030000',
-        upgradeVersion: '0.1.0'
+        upgradeVersion: '0.1.0',
+        /* --------------------------------- */
+        /* ------------ 分区表信息----------- */
+        parametersPartBoot: false,
+        parametersPartStart: '0x800c000',
+        parametersPartSize: 8192,
+        bspPartBoot: false,
+        bspPartStart: '0x8010000',
+        bspPartSize: 0x10000,
+        runtimePartBoot: true,
+        runtimePartStart: '0x8020000',
+        runtimePartSize: 0x20000,
+        userPartBoot: false,
+        userPartStart: '0x8040000',
+        userPartSize: 131072,
+        parameters_bkPartBoot: false,
+        parameters_bkPartStart: '0x8060000',
+        parameters_bkPartSize: '131072'
+        /* --------------------------------- */
       },
       rules: {
         version: [{ required: true, message: '版本不能为空' }],
         fileName: [{ required: true, message: '文件名不能为空' }],
         runtime: [{ required: true, message: 'runtime不能为空' }],
-        runtimeStart: [{ required: true, message: '起始地址不能为空' }],
         runtimeVersion: [{ required: true, message: '版本不能为空' }],
         bsp: [{ required: true, message: 'bsp不能为空' }],
-        bspStart: [{ required: true, message: '起始地址不能为空' }],
         bspVersion: [{ required: true, message: '版本不能为空' }],
         user: [{ required: true, message: 'user不能为空' }],
-        userStart: [{ required: true, message: '起始地址不能为空' }],
         userVersion: [{ required: true, message: '版本不能为空' }],
         upgrade: [{ required: true, message: 'upgrade不能为空' }],
-        upgradeStart: [{ required: true, message: '起始地址不能为空' }],
-        upgradeVersion: [{ required: true, message: '版本不能为空' }]
+        upgradeVersion: [{ required: true, message: '版本不能为空' }],
+        parametersPartStart: [{ required: true, message: '起始地址不能为空' }],
+        parametersPartSize: [{ required: true, message: '分区大小不能为空' }],
+        bspPartStart: [{ required: true, message: '起始地址不能为空' }],
+        bspPartSize: [{ required: true, message: '分区大小不能为空' }],
+        runtimePartStart: [{ required: true, message: '起始地址不能为空' }],
+        runtimePartSize: [{ required: true, message: '分区大小不能为空' }],
+        userPartStart: [{ required: true, message: '起始地址不能为空' }],
+        userPartSize: [{ required: true, message: '分区大小不能为空' }],
+        parameters_bkPartStart: [{ required: true, message: '起始地址不能为空' }],
+        parameters_bkPartSize: [{ required: true, message: '分区大小不能为空' }]
       },
       numberValidateForm: {
         age: '123'
@@ -229,6 +270,9 @@ export default {
   },
   mounted () {
     // -------------- 加载缓存配置 ------------------
+    // 从后端读取分区表配置
+    ipcRenderer.send('pack2main', { msg: 'read pack toml cfg' })
+
     if (!fs.existsSync(this.cachePath)) {
       fs.mkdirSync(this.cachePath)
     }
@@ -254,6 +298,35 @@ export default {
             type: arg.result === true ? 'success' : 'error',
             position: 'bottom-left'
           })
+          break
+        case 'read pack toml cfg res':
+          console.log(arg)
+          if (arg.result === false) {
+            this.$notify({
+              title: '读取分区参数出错',
+              message: arg.describe,
+              type: 'error',
+              position: 'bottom-left'
+            })
+            return
+          }
+
+          try {
+            for (let i = 0; i < arg.data.partion_table.length; i++) {
+              // console.log(this.int2hex(arg.data.partion_table[i].start_addr))
+              this.dataForm[arg.data.partion_table[i].label + 'PartStart'] = this.int2hex(arg.data.partion_table[i].start_addr)
+              this.dataForm[arg.data.partion_table[i].label + 'PartSize'] = arg.data.partion_table[i].size
+              this.dataForm[arg.data.partion_table[i].label + 'PartBoot'] = arg.data.partion_table[i].is_bootable
+            }
+          } catch (err) {
+            this.$notify({
+              title: '分区参数解析出错',
+              message: '' + err,
+              type: 'error',
+              position: 'bottom-left'
+            })
+          }
+
           break
         default:
           break

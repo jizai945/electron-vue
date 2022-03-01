@@ -3,6 +3,7 @@ from doctest import Example
 import os
 import configparser
 import re
+import toml
 try:
     from modules.runtime_example import runtime_txt
     from modules.user_example import user_txt
@@ -45,6 +46,7 @@ class EdsToC():
         self.user_c = user_path
         self.cfg = myconf()
         self.err = None
+        self.toml_cfg = None
         self._idx_list = []
         try:
             ret = self.cfg.read(self.eds)
@@ -97,16 +99,18 @@ class EdsToC():
         return data_len
         
 
-    def __convert_param_init(self, src:str) -> str:
+    def __convert_param_init(self, src:str, type:str = 'runtime') -> str:
         '''OD_PARAM_INIT'''
 
         write = '' 
-        for idx, section in enumerate(self.__get_idx_list()):
+        src_idx = self.__get_idx_list()
+        filter_idx = [idx for idx in src_idx if self.__judge_idx(idx, type)]
+        for idx, section in enumerate(filter_idx):
             # print(section)    
             obj_type = int(self.cfg.get(section, 'ObjectType'))
             notes = f'\t/* index 0x{section} :\t {self.cfg.get(section, "ParameterName")}. */'
-            last_ch = '' if idx == len(self.__get_idx_list())-1 else ','
-            last_n = '' if idx == len(self.__get_idx_list())-1 else '\n\t'
+            last_ch = '' if idx == len(filter_idx)-1 else ','
+            last_n = '' if idx == len(filter_idx)-1 else '\n\t'
 
             if obj_type == 7:
                 default_val = self.cfg.get(section, "DefaultValue")
@@ -138,7 +142,7 @@ class EdsToC():
                     
                     if i == sub_len-1:
                         write += '}' if obj_type == 9 else ''
-                    write += ', ' if (i != sub_len-1 or idx != len(self.__get_idx_list())-1) else ''
+                    write += ', ' if (i != sub_len-1 or idx != len(filter_idx)-1) else ''
                 write += f'{notes}\\\{last_n}'
 
             else:
@@ -146,17 +150,18 @@ class EdsToC():
 
         return re.sub("/(.*)OD_PARAM_INIT(.*)/", write, src)
 
-    def __convert_typedef_struct(self, src:str)->str:
+    def __convert_typedef_struct(self, src:str, type:str = 'runtime')->str:
         '''typedef struct'''
         write = ''
-        last_num = len(self.__get_idx_list())-1
-        for idx, section in enumerate(self.__get_idx_list()):
+        src_idx = self.__get_idx_list()
+        filter_idx = [idx for idx in src_idx if self.__judge_idx(idx, type)]
+        last_num = len(filter_idx)-1
+        for idx, section in enumerate(filter_idx):
             notes = f'/* index 0x{section} :\t{self.cfg.get(section, "ParameterName")} */\n\t'
             if self.cfg.has_option(section, 'DataType'):
                 data_type = eds_data_type[int(self.cfg.get(section, "DataType"), 16)]['name']
                 write += f'{notes}{data_type} slaveApp_obj{section};'
-                if idx != last_num:
-                    write += '\n\t'
+                write += '\n\t'
             else:
                 parent_type = 'UNS8'
                 parent_name = f'SlaveApp_highestSubIndex_obj{section}'
@@ -186,11 +191,13 @@ class EdsToC():
         write = write[:-2] # 去掉末尾的\n\t
         return re.sub("/(.*)typedef struct(.*)/", write, src)
 
-    def __convert_object_dictionary(self, src:str) -> str:
+    def __convert_object_dictionary(self, src:str, type:str = 'runtime') -> str:
         '''object dictionary'''
         write = ''
         line_tab = '\t'*5
-        for idx, section in enumerate(self.__get_idx_list()):
+        src_idx = self.__get_idx_list()
+        filter_idx = [idx for idx in src_idx if self.__judge_idx(idx, type)]
+        for idx, section in enumerate(filter_idx):
             sub_len = self.__get_idx_sublen(section)
             null_str = f'{line_tab}\tNULL,\n' * (1 if sub_len == 0 else sub_len)
             null_str = null_str[:-1]
@@ -234,16 +241,18 @@ f'''
         write = write[:-1]
         return re.sub("/(.*)OBJECT DICTIONARY(.*)/", write, src)
 
-    def __convert_indextable(self, src:str) -> str:
+    def __convert_indextable(self, src:str, type:str = 'runtime') -> str:
         '''index table'''
         write = ''
-        for idx, section in enumerate(self.__get_idx_list()):
+        src_idx = self.__get_idx_list()
+        filter_idx = [idx for idx in src_idx if self.__judge_idx(idx, type)]
+        for idx, section in enumerate(filter_idx):
             write += '{ ' + f'(subindex*)SlaveApp_Index{section}, sizeof(SlaveApp_Index{section})/sizeof(SlaveApp_Index{section}[0]), 0x{section}' + ' },\n\t'
 
         write = write[:-1]
         return re.sub("/(.*)indextable(.*)/", write, src)
 
-    def __convert_scanindexod(self, src:str) -> str:
+    def __convert_scanindexod(self, src:str, type:str = 'runtime') -> str:
         '''scan index od'''
         write = ''
         self.quick_dict = dict() # 建立字典方便后面处理
@@ -251,7 +260,9 @@ f'''
         for k in keys:
             self.quick_dict[k] = list()
 
-        for idx, section in enumerate(self.__get_idx_list()):
+        src_idx = self.__get_idx_list()
+        filter_idx = [idx for idx in src_idx if self.__judge_idx(idx, type)]
+        for idx, section in enumerate(filter_idx):
             write += f'\t\t\tcase 0x{section}: i = {idx}; *callbacks = SlaveApp_Index{section}_callbacks; break;\n'
             section_num = int(section, 16)
             if section_num >= 0x1200 and section_num <= 0x127f:
@@ -300,6 +311,29 @@ f'''
         write = write[:-2]
         return re.sub("/(.*)quick last(.*)/", write, src)
 
+    def __get_runtime_index(self) -> list:
+        '''获取runtime中需要的index'''
+        if self.toml_cfg == None:
+            try:
+                read = toml.load('./example/canopen.toml')
+            except:
+                read = toml.load('./backend/dist/example/canopen.toml') # 生成环境
+            self.toml_cfg = read
+            # print(read)
+
+        return self.toml_cfg['runtime']['index']
+
+    def __judge_idx(self, idx:str, type:str) -> bool:
+        '''判断idx和类型判断是否是需要生成的'''
+        if type == 'runtime': 
+            if int(idx, 16) in self.__get_runtime_index():
+                return True
+            return False
+        else:
+            if int(idx, 16) not in self.__get_runtime_index():
+                return True
+            return False
+
     def start_convert(self) -> bool:
         '''开始转换'''
         try:
@@ -325,14 +359,15 @@ f'''
 
             #  -------------------------- 根据py字符串 --------------------------------
             examples = [runtime_txt, user_txt]
+            types = ['runtime', 'user']
             c_out = [self.c, self.user_c]
             for i in range(len(examples)):
                 read = examples[i]
-                read = self.__convert_param_init(read) 
-                read = self.__convert_typedef_struct(read) 
-                read = self.__convert_object_dictionary(read)
-                read = self.__convert_indextable(read)
-                read = self.__convert_scanindexod(read)
+                read = self.__convert_param_init(read, types[i]) 
+                read = self.__convert_typedef_struct(read, types[i]) 
+                read = self.__convert_object_dictionary(read, types[i])
+                read = self.__convert_indextable(read, types[i])
+                read = self.__convert_scanindexod(read, types[i])
                 read = self.__convert_quick_first(read)
                 read = self.__convert_quick_last(read)
                 with open(c_out[i], 'w', encoding='utf-8') as f2:
@@ -361,8 +396,15 @@ f'''
     def get_err(self) -> str:
         return '' if self.err == None else str(self.err)
 
+    def toml_test(self):
+        try:
+            read = toml.load('./example/canopen.toml') # 开发环境
+        except:
+            read = toml.load('./backend/dist/example/canopen.toml') # 生成环境
+        print(read)
 
 if __name__ == '__main__':
     e = EdsToC('C:\\Users\\Wang\\Desktop\\demo2.eds', './runtime_test.c', './user_test.c')
     # e.dfs_file()
     e.start_convert()
+    # e.toml_test()
